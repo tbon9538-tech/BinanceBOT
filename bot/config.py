@@ -144,7 +144,11 @@ class XsMomentumSleeveConfig(_SleeveBase):
     exclude_symbols: list[str] = Field(default_factory=list)
     momentum_lookback: int = Field(28, ge=2)
     momentum_skip: int = Field(0, ge=0)
-    score: Literal["ret_over_vol", "ret", "blend"] = "ret_over_vol"
+    score: Literal["ret_over_vol", "ret", "blend", "ctrend"] = "ret_over_vol"
+    # 以下三项只在 score: ctrend 时使用（研究 R3，预注册见 doc/research/log.md）
+    ctrend_signals: Literal["price_volume", "price"] = "price_volume"
+    ctrend_window_weeks: int = Field(52, ge=2)  # 平均最近几个锚点的横截面回归系数
+    ctrend_horizon_days: int = Field(7, ge=1)  # 锚点间隔与预测期
     max_lookback_return: float | None = Field(1.5, gt=0)
     coin_sma_period: int = Field(50, ge=2)
     top_n: int = Field(5, ge=1)

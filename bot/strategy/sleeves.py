@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from bot.config import TrendSleeveConfig, UniverseConfig, XsMomentumSleeveConfig
+from bot.strategy import ctrend
 from bot.strategy.indicators import MarketPanel, column_symbol
 from bot.strategy.portfolio import cap_weights
 
@@ -68,13 +69,23 @@ def _window(cfg: XsMomentumSleeveConfig) -> int:
     w = max(cfg.momentum_lookback + 1, cfg.coin_sma_period, cfg.vol_lookback + 1)
     if cfg.score == "blend":
         w = max(w, max(BLEND_LOOKBACKS) + 1)
+    if cfg.score == "ctrend":
+        w = max(w, ctrend.WINDOW_DAYS)
     return w
 
 
 def satellite_scores(
-    panel: MarketPanel, cfg: XsMomentumSleeveConfig, t: pd.Timestamp, cols: list[str]
+    panel: MarketPanel,
+    cfg: XsMomentumSleeveConfig,
+    t: pd.Timestamp,
+    cols: list[str],
+    model: ctrend.CtrendModel | None = None,
 ) -> pd.Series:
     L, s = cfg.momentum_lookback, cfg.momentum_skip
+    if cfg.score == "ctrend":
+        if model is None:
+            raise ValueError("score: ctrend 需要 CtrendModel（由 MomentumV1 创建）")
+        return model.score(t, cols)
     if cfg.score == "ret_over_vol":
         score = panel.mom(L, s).loc[t, cols] / panel.vol(L).loc[t, cols]
     elif cfg.score == "ret":
@@ -92,8 +103,12 @@ def satellite_target(
     risk_on: bool,
     universe: list[str],
     blocked: Collection[str] = (),
+    model: ctrend.CtrendModel | None = None,
 ) -> dict[str, float]:
-    """卫星袖子：横截面动量 + 单币过滤 + 波动率目标。blocked 为冷却期中的列。"""
+    """卫星袖子：横截面动量 + 单币过滤 + 波动率目标。blocked 为冷却期中的列。
+
+    score: ctrend 时得分只用于排序，入选资格仍是"回看期收益 > 0"（与 ret_over_vol 的 score > 0 等价，R3）。
+    """
     if not risk_on or not universe:
         return {}
     cols = [c for c in universe if c not in blocked]
@@ -103,9 +118,14 @@ def satellite_target(
     cols = [c for c in cols if bool(complete[c])]
     if not cols:
         return {}
-    score = satellite_scores(panel, cfg, t, cols)
+    score = satellite_scores(panel, cfg, t, cols, model)
     close = panel.close.loc[t, cols]
-    ok = (score > 0) & (close > panel.sma(cfg.coin_sma_period).loc[t, cols])
+    positive = (
+        panel.mom(cfg.momentum_lookback, cfg.momentum_skip).loc[t, cols] > 0
+        if cfg.score == "ctrend"
+        else score > 0
+    )
+    ok = positive & score.notna() & (close > panel.sma(cfg.coin_sma_period).loc[t, cols])
     if cfg.max_lookback_return is not None:
         ok &= panel.lbr(cfg.momentum_lookback).loc[t, cols] <= cfg.max_lookback_return
     cand = [c for c in cols if bool(ok[c])]

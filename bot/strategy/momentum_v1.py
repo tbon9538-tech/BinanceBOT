@@ -13,6 +13,7 @@ import pandas as pd
 
 from bot.config import AppConfig, TrendSleeveConfig, XsMomentumSleeveConfig
 from bot.domain.types import Regime
+from bot.strategy.ctrend import CtrendModel
 from bot.strategy.indicators import MarketPanel
 from bot.strategy.portfolio import combine_sleeves
 from bot.strategy.regime import regime_with_exposure
@@ -60,6 +61,11 @@ class MomentumV1:
         self._sleeves = cfg.enabled_sleeves()
         self._raw_cache: dict[tuple[str, pd.Timestamp, frozenset[str]], dict[str, float]] = {}
         self._universe_cache: dict[pd.Timestamp, list[str]] = {}
+        self._ctrend: dict[str, CtrendModel] = {
+            name: CtrendModel(panel, s, lambda d, ex=tuple(s.exclude_symbols): self.universe(d, ex))
+            for name, s in self._sleeves.items()
+            if isinstance(s, XsMomentumSleeveConfig) and s.score == "ctrend"
+        }
 
     def exposure(self, d: pd.Timestamp) -> float:
         return float(self.regime.at[d, "exposure"])
@@ -95,7 +101,7 @@ class MomentumV1:
             else:
                 assert isinstance(scfg, XsMomentumSleeveConfig)
                 uni = self.universe(d, tuple(scfg.exclude_symbols)) if on else []
-                out = satellite_target(self.panel, scfg, d, on, uni, blocked)
+                out = satellite_target(self.panel, scfg, d, on, uni, blocked, self._ctrend.get(sleeve))
             e = self.exposure(d)
             if e < 1.0:  # 集成模式：按处于 Risk-On 的均线比例缩放（sma / tsmom 模式下 e 只取 0 或 1）
                 out = {k: w * e for k, w in out.items()}
