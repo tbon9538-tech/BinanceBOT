@@ -124,29 +124,31 @@ class VisionClient:
     def local_path(self, f: VisionFile) -> Path:
         return self.raw_dir / f.key
 
-    def fetch(self, f: VisionFile) -> tuple[pd.DataFrame, str]:
-        """下载（或复用本地已校验的文件）并解析，返回 (raw frame, sha256)。"""
-        resp = self._get(f"{VISION_URL}/{f.key}.CHECKSUM")
+    def fetch_verified(self, key: str) -> tuple[bytes, str]:
+        """下载 data.binance.vision 上的文件（或复用本地已校验的副本），按同名 .CHECKSUM 校验 sha256。"""
+        resp = self._get(f"{VISION_URL}/{key}.CHECKSUM")
         resp.raise_for_status()
         expected = resp.text.strip().split()[0].lower()
-        path = self.local_path(f)
-        content: bytes | None = None
+        path = self.raw_dir / key
         if path.exists():
             data = path.read_bytes()
             if hashlib.sha256(data).hexdigest() == expected:
-                content = data
-        if content is None:
-            resp = self._get(f"{VISION_URL}/{f.key}")
-            resp.raise_for_status()
-            data = resp.content
-            actual = hashlib.sha256(data).hexdigest()
-            if actual != expected:
-                raise ChecksumMismatch(f"{f.key}: 期望 {expected}，实际 {actual}")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".zip.part")
-            tmp.write_bytes(data)
-            tmp.replace(path)
-            content = data
+                return data, expected
+        resp = self._get(f"{VISION_URL}/{key}")
+        resp.raise_for_status()
+        data = resp.content
+        actual = hashlib.sha256(data).hexdigest()
+        if actual != expected:
+            raise ChecksumMismatch(f"{key}: 期望 {expected}，实际 {actual}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".zip.part")
+        tmp.write_bytes(data)
+        tmp.replace(path)
+        return data, expected
+
+    def fetch(self, f: VisionFile) -> tuple[pd.DataFrame, str]:
+        """下载（或复用本地已校验的文件）并解析，返回 (raw frame, sha256)。"""
+        content, expected = self.fetch_verified(f.key)
         with zipfile.ZipFile(io.BytesIO(content)) as z:
             names = [n for n in z.namelist() if n.endswith(".csv")]
             if len(names) != 1:
