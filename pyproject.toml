@@ -1,6 +1,6 @@
 [project]
 name = "binance-bot"
-version = "0.1.0"
+version = "1.0.0"
 description = "币安现货趋势–动量轮动机器人（核心–卫星），见 doc/binance_momentum_bot_spec.md"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"

@@ -58,7 +58,7 @@
 
 | 任务 | 负责 | 退出条件 |
 |---|---|---|
-| C1 版本 tag `v1.0.0` 与 `CHANGELOG.md` | 开发 | tag 指向当时的 master；CHANGELOG 汇总 M0～M7、R2、D-062/D-063 等关键修复 |
+| ~~C1 版本 tag `v1.0.0` 与 `CHANGELOG.md`~~ | 开发 | 已完成（2026-11-02）：tag 指向当时的 master；CHANGELOG 汇总 M0～M7、R2、D-062/D-063 等关键修复与阶段 A 的改动 |
 | C2 重新生成部署包 | 开发 | `dist/` 中的包与 tag 对应（旧包 21f7e18 删除或标注过期） |
 | ~~C3 `.dockerignore` 未提交改动~~ | — | 已完成：用户同意，已提交（aa0b79e） |
 | C4' Ed25519 实测 | 用户在 testnet 注册公钥 → 开发 | testnet 上 `status` 与一次 `--force-rebalance` 成功 |

@@ -157,6 +157,7 @@ scripts/check.sh        # Linux / WSL
 | [doc/strategy_review.md](doc/strategy_review.md) | v2 策略评审、文献、接口核对 |
 | [doc/strategy_research.md](doc/strategy_research.md) | 研究方案与实验设计 |
 | [doc/binance_momentum_bot_spec.md](doc/binance_momentum_bot_spec.md) | 需求说明 v3（含修订记录） |
+| [CHANGELOG.md](CHANGELOG.md) | 版本更新记录 |
 | [doc/ROADMAP.md](doc/ROADMAP.md) | 路线图：接下来的阶段、退出条件、用户决策点 |
 | [doc/dev_plan.md](doc/dev_plan.md) | 里程碑、验收标准、防过拟合规则 |
 | [doc/open_questions.md](doc/open_questions.md) | 决策记录与待定事项 |

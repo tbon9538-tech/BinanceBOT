@@ -11,7 +11,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 代码仓库 | `/Users/yeto/Documents/BinanceBOT`（macOS），分支 `master`，远端 `origin` = https://github.com/tbon9538-tech/BinanceBOT （**公开仓库**），没有 tag |
+| 代码仓库 | `/Users/yeto/Documents/BinanceBOT`（macOS），分支 `master`，远端 `origin` = https://github.com/tbon9538-tech/BinanceBOT （**公开仓库**）；当前版本 **v1.0.0**（tag，2026-11-02），更新记录见 `CHANGELOG.md` |
 | 运行状态 | **已暂停**：本机容器 `binancebot-bot-1` 已 `docker compose stop`（不是 kill，未撤单、未清仓；状态库与 demo 持仓 BTC/INJ/PEPE 保持原样）。最后一次运行 `mom1:2026-11-01 DONE`。恢复：用户同意后 `docker compose start bot`（或 `up -d`），之后每天 00:10 UTC 运行一次，`env: demo`。本机是该 demo 账户**唯一**的运行处 |
 | 未提交改动 | 无（`.dockerignore` 排除 `dist` 已经用户同意并提交） |
 | 研究 | E0～E11 完成；保留集**已运行过一次，不得再运行**；R2（多周期均线集成）未通过；试验累计 121 个 |
@@ -149,7 +149,7 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 **P1：demo 观察与收尾**
 
 5. 每周运行 `forward` 周报，把结果追加到 `doc/demo_log.md` 的周表；满 4 周、对账无差错后到达检查点 C4，向用户汇报。
-6. 打版本 tag（例如 `v1.0.0`），写 `CHANGELOG.md`；如有需要，按当前提交重新生成部署包。
+6. ~~打版本 tag，写 `CHANGELOG.md`~~：已完成（2026-11-02，`v1.0.0`，版本号同步到 `pyproject.toml`）。以后的改动先记到 CHANGELOG 的"未发布"一节。按当前版本重新生成部署包（C2）尚未做。
 7. ~~问用户如何处理 `.dockerignore` 的未提交改动~~：已提交（aa0b79e）。
 8. 用户在 testnet 注册 Ed25519 公钥后，实测 Ed25519 签名（代码已支持：`BINANCE_KEY_TYPE=ed25519`、`BINANCE_PRIVATE_KEY_PATH`）。
 
