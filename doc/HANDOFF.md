@@ -7,12 +7,12 @@
 
 ## 1. 一句话现状
 
-币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（340 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。目前在用户本机（macOS）用 Docker 常驻跑 **demo 前向观察**（2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机，原电脑的容器已删除）。
+币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（340 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。demo 前向观察 2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机（macOS），原电脑的容器已删除。**2026-11-01 17:06 UTC 起按用户要求暂停自动运行**（开发未完成），等用户说恢复再启动。
 
 | 项目 | 状态 |
 |---|---|
 | 代码仓库 | `/Users/yeto/Documents/BinanceBOT`（macOS），分支 `master`，远端 `origin` = https://github.com/tbon9538-tech/BinanceBOT （**公开仓库**），没有 tag |
-| 运行中 | **本机** Docker 容器 `binancebot-bot-1`（`docker compose up -d`，`run --daemon`），每天 00:10 UTC 运行一次，`env: demo`。这是该 demo 账户**唯一**的运行处 |
+| 运行状态 | **已暂停**：本机容器 `binancebot-bot-1` 已 `docker compose stop`（不是 kill，未撤单、未清仓；状态库与 demo 持仓 BTC/INJ/PEPE 保持原样）。最后一次运行 `mom1:2026-11-01 DONE`。恢复：用户同意后 `docker compose start bot`（或 `up -d`），之后每天 00:10 UTC 运行一次，`env: demo`。本机是该 demo 账户**唯一**的运行处 |
 | 未提交改动 | 无（`.dockerignore` 排除 `dist` 已经用户同意并提交） |
 | 研究 | E0～E11 完成；保留集**已运行过一次，不得再运行**；R2（多周期均线集成）未通过；试验累计 121 个 |
 | 待用户决定 | Q6 服务器地区、Q12 正式资金规模、C4（demo 观察满 4 周后是否上实盘） |
@@ -58,7 +58,7 @@ docker compose exec bot uv run --no-sync python -m bot kill        # 紧急停�
 docker compose logs -f bot
 ```
 
-修改代码后要让容器生效：`docker compose up -d --build`。
+修改代码后要让容器生效：`docker compose up -d --build`。**暂停期间不要执行 `up -d`**（它会把容器重新启动并恢复每日运行），只用 `docker compose build` 构建镜像；要看状态用 `docker compose run --rm bot status`（一次性容器，跑完即删，不会启动常驻模式）。
 
 ---
 
