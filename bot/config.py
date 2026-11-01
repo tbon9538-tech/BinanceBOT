@@ -247,9 +247,11 @@ class BacktestConfig(_Model):
     fee: float = Field(0.001, ge=0, lt=0.05)
     slippage: float = Field(0.0005, ge=0, lt=0.05)
     delist_haircut: float = Field(0.5, ge=0, le=1)
-    usdt_yield_annual: float = Field(
-        0.04, ge=0, lt=0.5
-    )  # 只用于报告"扣除 USDT 理财收益"的参考夏普（spec §1.2）
+    # 只用于报告"扣除 USDT 理财收益"的参考夏普（spec §1.2）
+    usdt_yield_annual: float = Field(0.04, ge=0, lt=0.5)
+    cash_yield_annual: float = Field(
+        0.0, ge=0, lt=0.5
+    )  # 研究 R7：回测中闲置 USDT 的理财年化收益；0 表示不计息
     start: date = date(2020, 1, 1)
     end: date = date(2026, 10, 31)
 

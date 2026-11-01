@@ -54,6 +54,32 @@ def test_constant_weight_known_answer(cfg: AppConfig) -> None:
     assert res.nav.iloc[-1] == pytest.approx((1 + 0.5 * r) ** n, rel=1e-9)
 
 
+def test_cash_yield_accrues_on_idle_cash_only(cfg: AppConfig) -> None:
+    """R7：闲置现金按日复利计息；持仓部分不计息。"""
+    p = MarketPanel.from_frames({"AUSDT": frame(geometric(366, 0.0))})  # 价格不变
+    y = 0.04
+    opts = EngineOptions(initial_capital=1000, fee=0, slippage=0, ideal=True, cash_yield=y)
+    flat = run_backtest(
+        cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {})
+    )  # type: ignore[arg-type]
+    n = len(p.dates)
+    assert flat.nav.iloc[-1] == pytest.approx((1 + y) ** (n / 365), rel=1e-9)  # 全部是现金
+    half = run_backtest(
+        cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {"AUSDT": 0.5})
+    )  # type: ignore[arg-type]
+    assert 1 < half.nav.iloc[-1] < flat.nav.iloc[-1]  # 一半持仓不计息
+    assert half.daily["interest"].sum() > 0
+    no_yield = run_backtest(
+        cfg,
+        p,
+        p.dates[0].date(),
+        p.dates[-1].date(),
+        opts=EngineOptions(initial_capital=1000, fee=0, slippage=0, ideal=True),
+        strategy=StubStrategy(p, {}),
+    )  # type: ignore[arg-type]
+    assert no_yield.nav.iloc[-1] == pytest.approx(1.0) and no_yield.daily["interest"].sum() == 0
+
+
 def test_costs_are_conserved(cfg: AppConfig) -> None:
     rng = np.random.default_rng(3)
     p = MarketPanel.from_frames({"AUSDT": frame(list(100 * np.cumprod(1 + rng.normal(0, 0.03, 80))))})

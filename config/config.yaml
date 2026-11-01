@@ -93,6 +93,7 @@ backtest:
   slippage: 0.0005
   delist_haircut: 0.5         # 【待研究】
   usdt_yield_annual: 0.04     # 只用于报告"扣除 USDT 理财收益"的参考夏普（spec §1.2），假设值，不影响交易与回测
+  cash_yield_annual: 0.0      # 研究 R7：回测中闲置 USDT 按这个年化收益计息；0 表示不计息（当前行为）
   start: "2020-01-01"
   end: "2026-10-31"           # 必须早于 research.holdout_start（D-085：研究集延长到 2026-10-31）
 

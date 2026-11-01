@@ -34,6 +34,7 @@ class EngineOptions:
     slippage: float = 0.0005
     delist_haircut: float = 0.5
     ideal: bool = False  # True：不设容忍带、最小下单额与 min_trade（E9 的"理想情况"）
+    cash_yield: float = 0.0  # 研究 R7：闲置现金的年化收益，按日复利
 
     @property
     def cost(self) -> float:
@@ -47,6 +48,7 @@ class EngineOptions:
             "fee": b.fee,
             "slippage": b.slippage,
             "delist_haircut": b.delist_haircut,
+            "cash_yield": b.cash_yield_annual,
         }
         base.update(kw)
         return cls(**base)
@@ -102,8 +104,11 @@ def run_backtest(
     delist_exits: list[tuple[str, str]] = []
     stop_events: list[tuple[str, str]] = []
 
+    daily_yield = (1 + opts.cash_yield) ** (1 / 365) - 1
     for t in dates:
         traded = cost_today = 0.0
+        interest = cash * daily_yield if cash > 0 else 0.0  # R7：前一天收盘后持有的现金隔夜计息
+        cash += interest
         # 1) 下架退出：交易段在 t 之前结束、且不是面板末尾
         for col in list(units):
             lv = last_valid[col]
@@ -216,6 +221,7 @@ def run_backtest(
                 **{f"gross_{k}": v for k, v in gross_by.items()},
                 "turnover": turnover,
                 "cost": cost_today,
+                "interest": interest,
                 "regime": tb.regime.value,
                 "n_pos": len(units),
                 "weights": json.dumps({k: round(v, 5) for k, v in sorted(tb.weights.items())}),
