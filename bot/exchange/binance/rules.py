@@ -4,6 +4,7 @@
 - 取整与校验的实现在 `bot.domain.filters`（订单计划与 SimSpotAccount 也要用，而它们不得
   import `bot.exchange.binance`），这里重新导出，便于 exchange 层统一使用。
 - MIN_NOTIONAL 已无交易对使用，只做解析容错；同时存在时取较大的下限。
+- MAX_POSITION 只解析上限；校验需要账户持仓，由订单计划完成（D-073）。
 - 状态不在官方枚举内的交易对按不可交易处理（SymbolStatus.UNKNOWN）；
   `isSpotTradingAllowed == false` 同样视为不可交易。
 """
@@ -126,6 +127,7 @@ def parse_symbol_rules(sym: Mapping[str, Any]) -> SymbolRules:
         ask_multiplier_down=ask_down,
         avg_price_mins=avg_mins,
         spot_allowed=bool(sym.get("isSpotTradingAllowed", True)),
+        max_position=_opt_positive(filters.get("MAX_POSITION", {}).get("maxPosition")),
     )
 
 

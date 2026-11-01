@@ -139,6 +139,7 @@ class SymbolRules:
     ask_multiplier_down: Decimal | None = None
     avg_price_mins: int | None = None
     spot_allowed: bool = True  # exchangeInfo.isSpotTradingAllowed
+    max_position: Decimal | None = None  # MAX_POSITION：整个账户该基础资产的持仓上限；None 表示不限制
 
     @property
     def is_trading(self) -> bool:

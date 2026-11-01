@@ -195,6 +195,20 @@ def test_check_order_each_filter() -> None:
     assert check_order(zero, Side.BUY, D("1.23456789"), D("0.000000001"), None) == []
 
 
+def test_max_position_parsed_and_checked_for_buys_only() -> None:
+    f = [*BTC_FILTERS, {"filterType": "MAX_POSITION", "maxPosition": "1.00000000"}]
+    r = parse_symbol_rules(_sym(filters=f))
+    assert r.max_position == D("1")
+    assert parse_symbol_rules(_sym()).max_position is None
+    ref = D("50000")
+    assert check_order(r, Side.BUY, D("50000"), D("0.5"), ref, position=D("0.5")) == []  # 恰好等于上限
+    assert _names(check_order(r, Side.BUY, D("50000"), D("0.5"), ref, position=D("0.50001"))) == {
+        "MAX_POSITION"
+    }
+    assert check_order(r, Side.SELL, D("50000"), D("0.5"), ref, position=D("5")) == []  # 只限制买单
+    assert check_order(r, Side.BUY, D("50000"), D("0.5"), ref) == []  # 调用方不提供持仓：不检查
+
+
 def test_is_dust() -> None:
     r = make_rules("SOLUSDT", "SOL", step="0.01", min_qty="0.01", min_notional="5")
     assert is_dust(D("0.04"), D("100"), r)  # 4 USDT < 5

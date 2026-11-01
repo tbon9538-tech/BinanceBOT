@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -29,9 +29,16 @@ from bot.app.account_view import StrategyAccountView, refresh_baselines
 from bot.config import AppConfig, AssetsConfig, TrendSleeveConfig
 from bot.data.store import MarketStore
 from bot.data.sync import SyncReport, sync_rest_tail
-from bot.domain.types import Balance, Env, SymbolRules, SystemState
+from bot.domain.types import Balance, Env, Side, SymbolRules, SystemState
 from bot.exchange.base import MarketDataSource, SpotAccount
-from bot.execution.planner import count_skips, plan_buys, plan_liquidation, plan_sells
+from bot.execution.planner import (
+    PlanSkip,
+    SkippedSymbol,
+    count_skips,
+    plan_buys,
+    plan_liquidation,
+    plan_sells,
+)
 from bot.execution.spot_executor import KILL_MAX_ATTEMPTS, ExecutionReport, SpotExecutor
 from bot.notify import heartbeat
 from bot.notify.telegram import TelegramNotifier
@@ -550,6 +557,7 @@ class DailyRunner:
             for c in sp.buy_candidates:
                 msgs.append(f"[dry-run] BUY 候选 {c.symbol} 约 {c.delta_usdt:.2f} USDT")
             return None, None, msgs
+        self._warn_filter_rejected(sp.skipped, Side.SELL, run_id)
         sells = ex.execute(sp.sells, balances=balances) if sp.sells else None
         if sells is not None and sells.aborted:
             msgs.append("下单过程中检测到 KILL，停止")
@@ -560,13 +568,29 @@ class DailyRunner:
         balances2 = acct.get_balances()
         books2, avg2 = _books(acct, {c.symbol for c in sp.buy_candidates}, rules)
         usdt_free = balances2[QUOTE].free if QUOTE in balances2 else Decimal(0)
+        # MAX_POSITION 按整个账户的持仓计算（不扣外部基线），只在有候选受此限制时多查一次余额（D-073）
+        positions = None
+        if any(rules[c.symbol].max_position is not None for c in sp.buy_candidates if c.symbol in rules):
+            positions = {a: b.free + b.locked for a, b in self.d.account.get_balances().items()}
         bp = plan_buys(
             sp.buy_candidates, usdt_free, rules, books2, avg2, cfg.rebalance, cfg.execution,
-            blocked_symbols=ex.blocked_symbols,
+            blocked_symbols=ex.blocked_symbols, account_positions=positions,
         )  # fmt: skip
-        msgs.append(f"买单 {len(bp.buys)} 笔（可用 {bp.available_usdt:.2f} USDT，缩放 {bp.scale:.3f}）")
+        msgs.append(
+            f"买单 {len(bp.buys)} 笔（可用 {bp.available_usdt:.2f} USDT，缩放 {bp.scale:.3f}），"
+            f"跳过 {count_skips(bp.skipped)}"
+        )
+        self._warn_filter_rejected(bp.skipped, Side.BUY, run_id)
         buys = ex.execute(bp.buys, balances=balances2) if bp.buys else None
         return sells, buys, msgs
+
+    def _warn_filter_rejected(self, skipped: Sequence[SkippedSymbol], side: Side, run_id: str) -> None:
+        """过滤器校验不通过的订单：放弃该笔，记录 WARN（spec §6.3）。"""
+        for s in skipped:
+            if s.reason is PlanSkip.FILTER_REJECTED:
+                log.warning("%s %s 过滤器校验不通过，放弃该笔：%s", side.value, s.symbol, s.detail)
+                payload = {"symbol": s.symbol, "side": side.value, "detail": s.detail}
+                self._event("FILTER_REJECTED", "WARN", payload, run_id)
 
     def _liquidate(
         self, ex: SpotExecutor, rules: Mapping[str, SymbolRules], managed: set[str]
@@ -603,7 +627,8 @@ class DailyRunner:
         lines = [
             f"[{self.cfg.strategy_id} · {self.cfg.env.value}] 日报 {t}",
             f"单位净值 {navu:.4f}，净值 {nav.nav:.2f} USDT，回撤 {dd:.1%}，仓位 {nav.gross:.0%}",
-            f"大盘：{tb.regime.value if tb else '未知'}",
+            f"大盘：{tb.regime.value if tb else '未知'}"
+            + (f"（集成仓位乘数 {tb.exposure:.2f}）" if tb and self.cfg.regime.mode == "ensemble" else ""),
         ]
         if nav.positions:
             lines.append(

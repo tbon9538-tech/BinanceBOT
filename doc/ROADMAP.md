@@ -39,7 +39,7 @@
 
 ### B demo 前向观察（进行中，≥ 4 周）
 
-- **运行**：本机（macOS，2026-11-01 从原 Windows 电脑迁来，原电脑容器已删除）Docker 常驻，每天 00:10 UTC（北京时间 08:10）；电脑需保持开机且不休眠，Docker Desktop 需在运行。**目前已暂停**（容器 stop，未 kill）；恢复用 `docker compose start bot`。
+- **运行**：本机（macOS，2026-11-01 从原 Windows 电脑迁来，原电脑容器已删除）Docker 常驻，每天 00:10 UTC（北京时间 08:10）；电脑需保持开机且不休眠，Docker Desktop 需在运行。**目前已暂停**（容器 stop，未 kill）；恢复用 `docker compose up -d --build`（按最新代码重建容器；`start` 只会启动旧镜像），避开北京时间 08:10 前后。
 - **每周**：`docker compose exec bot uv run --no-sync python -m bot forward`，结果追加到 `doc/demo_log.md` 的周表。
 - **C4 的进入条件**（dev_plan M7-3，最早约 2026-11-30）：
 
@@ -62,7 +62,7 @@
 | C2 重新生成部署包 | 开发 | `dist/` 中的包与 tag 对应（旧包 21f7e18 删除或标注过期） |
 | ~~C3 `.dockerignore` 未提交改动~~ | — | 已完成：用户同意，已提交（aa0b79e） |
 | C4' Ed25519 实测 | 用户在 testnet 注册公钥 → 开发 | testnet 上 `status` 与一次 `--force-rebalance` 成功 |
-| C5 小缺口 | 开发 | 下单前检查 `MAX_POSITION`；`forward` 命令加单元测试；合并 `tests/test_run_once.py` 与 `bot/backtest/sim_env.py` 的重复构造代码；日报显示 ensemble 仓位乘数 |
+| ~~C5 小缺口~~ | 开发 | 已完成（2026-11-02，D-073、D-074）：下单前检查 `MAX_POSITION`；`forward` 命令加单元测试（并修复取错同日快照）；合并 `tests/test_run_once.py` 与 `bot/backtest/sim_env.py` 的重复构造代码；日报显示 ensemble 仓位乘数 |
 
 ### 【C4 检查点】用户决策
 

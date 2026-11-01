@@ -30,6 +30,7 @@ class TargetBreakdown:
     smoothed: dict[str, dict[str, float]]  # 袖子 → S_t
     weights: dict[str, float]  # W_t：面板列 → 占策略资金的权重
     universe: list[str]  # 卫星袖子当天的标的池
+    exposure: float = 1.0  # 大盘仓位乘数：sma / tsmom 为 0 或 1，ensemble 为处于 Risk-On 的均线比例
 
 
 class MomentumV1:
@@ -142,6 +143,7 @@ class MomentumV1:
             smoothed=smoothed,
             weights=weights,
             universe=sat_universe,
+            exposure=self.exposure(t),
         )
 
     def sleeve_of(self, col: str) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -223,6 +224,20 @@ def test_buy_candidates_filtered_before_scaling() -> None:
     tight = {**RULES, "BTCUSDT": make_rules("BTCUSDT", "BTC", step="1")}  # 1 BTC 的 step：3000 USDT 买不到
     rej = plan_buys(cands[:1], D("4000"), tight, BOOKS, AVG, REL, EXEC)
     assert reasons(rej) == {"BTCUSDT": "filter_rejected"}
+
+
+def test_max_position_uses_whole_account_position() -> None:
+    cands = [BuyCandidate("BTCUSDT", 0.3, 0.0, D("3000"), D("0"))]  # 约 0.0598 BTC
+    capped = {**RULES, "BTCUSDT": replace(RULES["BTCUSDT"], max_position=D("1"))}
+    ok = plan_buys(cands, D("4000"), capped, BOOKS, AVG, REL, EXEC, account_positions={"BTC": D("0.9")})
+    assert [o.symbol for o in ok.buys] == ["BTCUSDT"]
+    # 账户里（含外部基线）已有 0.95 BTC，再买 0.0598 会超过 1：放弃这一笔
+    over = plan_buys(cands, D("4000"), capped, BOOKS, AVG, REL, EXEC, account_positions={"BTC": D("0.95")})
+    assert over.buys == () and reasons(over) == {"BTCUSDT": "filter_rejected"}
+    assert "MAX_POSITION" in over.skipped[0].detail
+    # 交易对有 MAX_POSITION 但调用方没给账户持仓：保守地跳过
+    unknown = plan_buys(cands, D("4000"), capped, BOOKS, AVG, REL, EXEC)
+    assert unknown.buys == () and "缺少账户持仓" in unknown.skipped[0].detail
 
 
 def test_percent_price_clamp_marks_may_not_fill() -> None:

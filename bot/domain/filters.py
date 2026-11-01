@@ -21,7 +21,7 @@ _PREC = 60  # 取整时使用的 Decimal 精度，避免默认 28 位在极小 s
 
 @dataclass(frozen=True, slots=True)
 class FilterViolation:
-    filter: str  # PRICE_FILTER / LOT_SIZE / NOTIONAL / PERCENT_PRICE_BY_SIDE
+    filter: str  # PRICE_FILTER / LOT_SIZE / NOTIONAL / PERCENT_PRICE_BY_SIDE / MAX_POSITION
     detail: str
 
     def __str__(self) -> str:
@@ -116,11 +116,19 @@ def limit_price(
 
 
 def check_order(
-    rules: SymbolRules, side: Side, price: Decimal, qty: Decimal, ref_price: Decimal | None
+    rules: SymbolRules,
+    side: Side,
+    price: Decimal,
+    qty: Decimal,
+    ref_price: Decimal | None,
+    *,
+    position: Decimal | None = None,
 ) -> list[FilterViolation]:
     """按 filters.md 校验 LIMIT 订单。返回空列表表示全部通过。
 
     ref_price 为 avgPrice。交易对有 PERCENT_PRICE_BY_SIDE 而 ref_price 缺失时，保守地判为不通过。
+    position 为**整个账户**（不扣外部基线）该基础资产的 free + locked + 未成交买单数量，只用于买单的
+    MAX_POSITION；None 表示调用方不做这项检查（例如重试时数量只会变小，D-073）。
     """
     v: list[FilterViolation] = []
     if price <= 0:
@@ -157,6 +165,9 @@ def check_order(
                 v.append(FilterViolation("PERCENT_PRICE_BY_SIDE", f"价格 {price} < 下限 {lo}"))
             if hi is not None and price > hi:
                 v.append(FilterViolation("PERCENT_PRICE_BY_SIDE", f"价格 {price} > 上限 {hi}"))
+    cap = rules.max_position
+    if side is Side.BUY and cap is not None and position is not None and position + qty > cap:
+        v.append(FilterViolation("MAX_POSITION", f"买入后持仓 {position + qty} > maxPosition {cap}"))
     return v
 
 

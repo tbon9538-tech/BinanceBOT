@@ -317,7 +317,11 @@ class SimSpotAccount:
             or req.price is None
         ):
             raise ExchangeError(-1013, "SimSpotAccount 只支持 LIMIT IOC", 400)
-        violations = check_order(rules, req.side, req.price, req.quantity, self.get_avg_price(req.symbol))
+        held = self.balances.get(rules.base_asset)
+        position = held.free + held.locked if held is not None else _ZERO
+        violations = check_order(
+            rules, req.side, req.price, req.quantity, self.get_avg_price(req.symbol), position=position
+        )
         if violations:
             raise ExchangeError(-1013, f"Filter failure: {violations[0].filter}", 400)
         base, quote = rules.base_asset, rules.quote_asset

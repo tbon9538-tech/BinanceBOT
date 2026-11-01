@@ -323,11 +323,14 @@ def plan_buys(
     exec_cfg: ExecutionConfig,
     *,
     blocked_symbols: Collection[str] = frozenset(),
+    account_positions: Mapping[str, Decimal] | None = None,
 ) -> BuyPlan:
     """第二阶段：在卖单完成、余额刷新之后计算买单（spec §6.3）。
 
     books 应是卖单之后重新获取的 bookTicker。被阻断、不可交易、没有报价的候选先剔除，
     剩下的买入金额合计超过 A 时按同一比例缩小；缩小后的金额再经 should_skip 判断金额下限。
+    account_positions：**整个账户**（不扣外部基线）每个资产的 free + locked，用于 MAX_POSITION；
+    交易对有 MAX_POSITION 而没有提供时，保守地跳过该交易对（D-073）。
     """
     available = max(usdt_free, _ZERO) * (_ONE - exec_cfg.fee_buffer)
     skipped: list[SkippedSymbol] = []
@@ -358,6 +361,14 @@ def plan_buys(
                 SkippedSymbol(c.symbol, PlanSkip.NO_REFERENCE_PRICE, "", c.target_weight, c.current_weight)
             )
             continue
+        if r.max_position is not None and account_positions is None:
+            skipped.append(
+                SkippedSymbol(
+                    c.symbol, PlanSkip.FILTER_REJECTED, "MAX_POSITION: 缺少账户持仓，无法校验",
+                    c.target_weight, c.current_weight,
+                )
+            )  # fmt: skip
+            continue
         eligible.append((c, r, book, ref))
 
     requested = sum((c.delta_usdt for c, _, _, _ in eligible), _ZERO)
@@ -383,7 +394,10 @@ def plan_buys(
             continue
         priced = price_limit_order(Side.BUY, bid, ask, exec_cfg.max_slippage, r, ref)
         qty = round_qty(amount / priced.price, r) if priced.price > 0 else _ZERO
-        violations = check_order(r, Side.BUY, priced.price, qty, ref)
+        position = None
+        if r.max_position is not None and account_positions is not None:
+            position = account_positions.get(r.base_asset, _ZERO)
+        violations = check_order(r, Side.BUY, priced.price, qty, ref, position=position)
         if violations:
             skipped.append(
                 SkippedSymbol(

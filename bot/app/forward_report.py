@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -20,7 +20,7 @@ import pandas as pd
 
 from bot import paths
 from bot.backtest.engine import EngineOptions, run_backtest
-from bot.config import AppConfig, load_assets
+from bot.config import AppConfig, AssetsConfig, load_assets
 from bot.data.store import MarketStore
 from bot.persistence.repo import StateRepo
 from bot.strategy.indicators import MarketPanel, column_symbol
@@ -30,19 +30,25 @@ FORWARD_DIR = Path("doc/forward")
 
 
 def _daily_navu(repo: StateRepo, cfg: AppConfig) -> pd.Series:
+    """每天第一个 PRE_TRADE 快照的单位净值（同一天手动补跑产生的后续快照不计）。"""
     snaps = repo.list_nav_snapshots(cfg.strategy_id, cfg.account_id, kind="PRE_TRADE")
-    s = pd.Series({pd.Timestamp(r.time.date()): float(r.nav_per_unit) for r in snaps})
-    return s[~s.index.duplicated(keep="first")].sort_index()
+    s = pd.Series(
+        [float(r.nav_per_unit) for r in snaps],
+        index=pd.DatetimeIndex([pd.Timestamp(r.time.date()) for r in snaps]),
+        dtype="float64",
+    ).sort_index(kind="stable")
+    return s[~s.index.duplicated(keep="first")]
 
 
-def build_forward_report(cfg: AppConfig, since: date | None = None) -> str:
-    repo = StateRepo.open(paths.state_db(cfg.env.value))
-    store = MarketStore(paths.MARKET_DB)
+def build_forward_report(
+    cfg: AppConfig, repo: StateRepo, store: MarketStore, assets: AssetsConfig, since: date | None = None
+) -> str:
     navu = _daily_navu(repo, cfg)
-    if navu.empty:
-        return f"# 前向运行周报（{cfg.env.value}）\n\n还没有任何 PRE_TRADE 快照。\n"
     if since is not None:
         navu = navu[navu.index >= pd.Timestamp(since)]
+    if navu.empty:
+        after = f"{since} 之后" if since is not None else ""
+        return f"# 前向运行周报（{cfg.env.value}）\n\n{after}还没有任何 PRE_TRADE 快照。\n"
     start, end = navu.index[0].date(), navu.index[-1].date()
     expected = pd.date_range(start, end, freq="D")
     missed = [d.date().isoformat() for d in expected if d not in navu.index]
@@ -75,7 +81,6 @@ def build_forward_report(cfg: AppConfig, since: date | None = None) -> str:
     slip = sum(slips) / len(slips) if slips else float("nan")
 
     # ---- 研究引擎同期模拟 ----
-    assets = load_assets(cfg.universe.assets_file)
     allowed = {f"{a}USDT" for a in assets.approved_assets}
     syms = sorted(allowed | {cfg.regime.symbol})
     end_excl = (end + timedelta(days=1)).isoformat()
@@ -129,9 +134,11 @@ def build_forward_report(cfg: AppConfig, since: date | None = None) -> str:
 
 def cmd_forward(cfg: AppConfig, args: argparse.Namespace) -> int:
     since = date.fromisoformat(args.since) if args.since else None
-    text = build_forward_report(cfg, since)
+    repo = StateRepo.open(paths.state_db(cfg.env.value))
+    store = MarketStore(paths.MARKET_DB)
+    text = build_forward_report(cfg, repo, store, load_assets(cfg.universe.assets_file), since)
     FORWARD_DIR.mkdir(parents=True, exist_ok=True)
-    out = FORWARD_DIR / f"forward_{cfg.env.value}_{date.today().isoformat()}.md"
+    out = FORWARD_DIR / f"forward_{cfg.env.value}_{datetime.now(UTC).date().isoformat()}.md"
     out.write_text(text, encoding="utf-8")
     print(text)
     print(f"已写入 {out}")

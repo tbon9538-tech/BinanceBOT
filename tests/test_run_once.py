@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -10,129 +9,25 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import numpy as np
-import pandas as pd
 import pytest
 
 from bot.app.daemon import next_run_at, run_daemon
-from bot.app.run_once import DailyRunner, RunDeps, managed_assets
-from bot.backtest.sim_account import SimSpotAccount
-from bot.config import AppConfig, AssetsConfig, BackupConfig
-from bot.data.store import MarketStore
+from bot.app.run_once import DailyRunner, managed_assets
+from bot.backtest.sim_env import build_sim_deps, sim_config
+from bot.config import BackupConfig
 from bot.domain.types import Side, SystemState
-from bot.notify.telegram import TelegramNotifier
 from bot.persistence.backup import list_backups
 from bot.persistence.repo import StateRepo
-from tests.conftest import CONFIG_PATH
-from tests.exec_helpers import make_rules
-from tests.helpers import raw_frame
 
 D = Decimal
 RUN_DATE = date(2026, 11, 2)
 T = RUN_DATE - timedelta(days=1)
-ALTS = [f"A{i}" for i in range(1, 7)]
-N_DAYS = 420
-
-
-def _series(seed: int, drift: float, vol: float) -> list[float]:
-    rng = np.random.default_rng(seed)
-    return list(100 * np.cumprod(1 + drift + rng.normal(0, vol, N_DAYS)))
-
-
-def market_frames() -> dict[str, pd.DataFrame]:
-    start = T - timedelta(days=N_DAYS - 1)
-    btc = _series(1, 0.003, 0.02)
-    frames = {"BTCUSDT": raw_frame(start, N_DAYS, close=lambda i: btc[i], qv=lambda i: 5e9)}
-    for k, a in enumerate(ALTS):
-        s = _series(10 + k, 0.004 - 0.0005 * k, 0.04)
-        frames[f"{a}USDT"] = raw_frame(
-            start, N_DAYS, close=lambda i, s=s: s[i], qv=lambda i, k=k: 1e8 * (k + 1)
-        )
-    return frames
-
-
-class FakeMarket:
-    def __init__(self, frames: Mapping[str, pd.DataFrame], withhold_last: set[str] = frozenset()) -> None:  # type: ignore[assignment]
-        self.frames = frames
-        self.withhold_last = set(withhold_last)
-
-    def get_exchange_info(self) -> Mapping[str, Any]:
-        return {
-            "symbols": [
-                {
-                    "symbol": s,
-                    "baseAsset": s[:-4],
-                    "quoteAsset": "USDT",
-                    "status": "TRADING",
-                    "isSpotTradingAllowed": True,
-                }
-                for s in self.frames
-            ]
-        }
-
-    def get_daily_klines(self, symbol: str, start: date, end: date) -> pd.DataFrame:
-        df = self.frames[symbol]
-        if symbol in self.withhold_last:
-            end = end - timedelta(days=1)
-        return df[(df["date"] >= start.isoformat()) & (df["date"] <= end.isoformat())].reset_index(drop=True)
-
-
-def make_account(frames: Mapping[str, pd.DataFrame], usdt: str = "1000") -> SimSpotAccount:
-    last = {s: D(f["close"].iloc[-1]) for s, f in frames.items()}
-    rules = {s: make_rules(s, s[:-4], step="0.00001", tick="0.0001") for s in frames}
-    books = {s: (p * D("0.9995"), p * D("1.0005")) for s, p in last.items()}
-    return SimSpotAccount(
-        rules=rules,
-        balances={"USDT": D(usdt)},
-        books=books,
-        avg_prices=last,
-        prices=last,
-        account_id="spot-main",
-    )
-
-
-def make_cfg() -> AppConfig:
-    import yaml
-
-    raw = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
-    raw["universe"].update({"min_median_quote_volume": 0, "min_listing_days": 60})
-    raw["data"]["history_days"] = 400
-    raw["notify"]["daily_report"] = True
-    return AppConfig.model_validate(raw)
-
-
-class Clock:
-    def __init__(self, t: datetime) -> None:
-        self.t = t
-        self.sleeps: list[float] = []
-
-    def now(self) -> datetime:
-        return self.t
-
-    def sleep(self, s: float) -> None:
-        self.sleeps.append(s)
-        self.t += timedelta(seconds=s)
 
 
 @pytest.fixture
-def env(tmp_path: Path):  # type: ignore[no-untyped-def]
-    frames = market_frames()
-    clock = Clock(datetime(RUN_DATE.year, RUN_DATE.month, RUN_DATE.day, 0, 10, tzinfo=UTC))
-    acct = make_account(frames)
-    deps = RunDeps(
-        cfg=make_cfg(),
-        assets=AssetsConfig(approved_assets=["BTC", *ALTS]),
-        account=acct,
-        market=FakeMarket(frames),
-        store=MarketStore(tmp_path / "market.db"),
-        repo=StateRepo.open(tmp_path / "state.db", clock=clock.now),
-        notifier=TelegramNotifier(token="", chat_id=""),
-        kill_file=tmp_path / "KILL",
-        lock_file=tmp_path / "run.lock",
-        now=clock.now,
-        sleep=clock.sleep,
-        data_retry_sleep_sec=0.0,
-    )
+def env(tmp_path: Path, base_cfg: dict[str, Any]):  # type: ignore[no-untyped-def]
+    """合成行情 + SimSpotAccount + 临时数据库；与故障演练共用 bot.backtest.sim_env。"""
+    deps, acct, _, clock = build_sim_deps(sim_config(base_cfg), tmp_path, RUN_DATE)
     return deps, acct, clock
 
 
@@ -186,7 +81,7 @@ def test_kill_file_liquidates_and_stops(env) -> None:  # type: ignore[no-untyped
 
 def test_data_not_ready_retries_then_skips(env) -> None:  # type: ignore[no-untyped-def]
     deps, acct, clock = env
-    deps.market = FakeMarket(market_frames(), withhold_last={"BTCUSDT"})
+    deps.market.withhold_last = {"BTCUSDT"}  # type: ignore[attr-defined]
     r = DailyRunner(deps).run_once()
     assert r.status == "SKIPPED"
     assert len(clock.sleeps) == 6  # spec §3.2：最多重试 6 次
@@ -286,3 +181,36 @@ def test_backup_failure_only_warns(env, tmp_path: Path) -> None:  # type: ignore
     assert DailyRunner(deps).run_once().status == "DONE"
     [ev] = deps.repo.list_events("mom1", type_="BACKUP_FAILED")
     assert ev.level == "WARN"
+
+
+def test_max_position_counts_external_holdings(env) -> None:  # type: ignore[no-untyped-def]
+    """MAX_POSITION 按整个账户计算：账户原有的 1 BTC（外部基线）也占额度（D-073）。"""
+    deps, acct, _ = env
+    acct.adjust_balance("BTC", D("1"))
+    acct.rules["BTCUSDT"] = replace(acct.rules["BTCUSDT"], max_position=D("1.0001"))
+    r = DailyRunner(deps).run_once()
+    assert r.status == "DONE", r.messages
+    assert not [o for o in acct.placed if o.symbol == "BTCUSDT"]  # 下单前就放弃，没有被交易所拒单
+    assert [o for o in acct.placed if o.side is Side.BUY]  # 其他币照常买入
+    [ev] = deps.repo.list_events("mom1", type_="FILTER_REJECTED")
+    assert ev.level == "WARN" and "MAX_POSITION" in ev.payload_json
+
+
+class _Inbox:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    def send(self, text: str, level: str = "INFO") -> bool:
+        self.sent.append(text)
+        return False
+
+
+@pytest.mark.parametrize("mode", ["sma", "ensemble"])
+def test_daily_report_shows_ensemble_multiplier(env, mode: str) -> None:  # type: ignore[no-untyped-def]
+    deps, _, _ = env
+    regime = deps.cfg.regime.model_copy(update={"mode": mode})
+    inbox = _Inbox()
+    deps = replace(deps, cfg=deps.cfg.model_copy(update={"regime": regime}), notifier=inbox)
+    assert DailyRunner(deps).run_once().status == "DONE"
+    [report] = [m for m in inbox.sent if "日报" in m]
+    assert ("集成仓位乘数" in report) is (mode == "ensemble")
