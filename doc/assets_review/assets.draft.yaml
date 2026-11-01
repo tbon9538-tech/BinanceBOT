@@ -1,0 +1,113 @@
+# 资产审核草稿（自动生成，仅供参考）。审核后由人工把结果写入 config/assets.yaml。
+# 数据截至 2026-10-31。规则：疑似股票/ETF、疑似稳定币建议排除；
+# 其余通过流动性筛选的待审核资产建议批准。
+approved_assets:
+- AAVE
+- ADA
+- AERO
+- APT
+- ARB
+- ASTER
+- AVAX
+- BCH
+- BNB
+- BTC
+- DASH
+- DOGE
+- DOT
+- ENA
+- ERA
+- ETH
+- FET
+- FIL
+- GRAM
+- GTC
+- HBAR
+- ICP
+- INJ
+- LINK
+- LTC
+- NEAR
+- ONDO
+- OP
+- PENGU
+- PEPE
+- PUMP
+- QNT
+- SEI
+- SOL
+- STRK
+- SUI
+- TAO
+- TIA
+- TRUMP
+- TRX
+- UNI
+- WLD
+- XLM
+- XPL
+- XRP
+- ZEC
+- ZRO
+excluded_assets:
+  stablecoins_fiat:
+  - AEUR
+  - ARS
+  - AUD
+  - BFUSD
+  - BIDR
+  - BRL
+  - BUSD
+  - COP
+  - CZK
+  - DAI
+  - EUR
+  - EURI
+  - FDUSD
+  - GBP
+  - IDRT
+  - JPY
+  - MXN
+  - NGN
+  - PAX
+  - PLN
+  - RLUSD
+  - RON
+  - RUB
+  - SUSD
+  - TRY
+  - TUSD
+  - U
+  - UAH
+  - USD1
+  - USDC
+  - USDE
+  - USDP
+  - USDS
+  - USDSB
+  - UST
+  - USTC
+  - XUSD
+  - ZAR
+  wrapped_or_pegged:
+  - WBTC
+  - WBETH
+  - BETH
+  - PAXG
+  - XAUT
+  tokenized_stocks_etf:
+  - CRCLB
+  - INTCB
+  - KORUB
+  - MSTRB
+  - MUB
+  - NVDAB
+  - SKHYB
+  - SNDKB
+  - SOXLB
+  - SPCXB
+  other: []
+excluded_patterns:
+- ^[A-Z0-9]+(UP|DOWN|BULL|BEAR)$
+pattern_exceptions:
+- JUP

@@ -80,7 +80,7 @@ def build_review(
                 "ann_vol_90d": round(v, 3) if (v := annualized_vol(seg, as_of)) is not None else None,
                 "weekend_ratio": round(w, 2) if (w := weekend_move_ratio(seg, as_of)) is not None else None,
                 "suspected_stable": suspected_stablecoin(seg, as_of) if not seg.empty else False,
-                "suspected_equity": suspected_equity_token(seg, as_of) if not seg.empty else False,
+                "suspected_equity": suspected_equity_token(seg, as_of, base) if not seg.empty else False,
                 "passes_liquidity": ok,
             }
         )

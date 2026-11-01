@@ -225,9 +225,10 @@ def test_suspected_stable_and_equity_flags() -> None:
     rets = [0.0 if d.weekday() >= 5 else r for d, r in zip(days, rets, strict=True)]
     px = 100 * np.cumprod(1 + np.array(rets))
     equity = _float(start, 120, close=lambda i: float(px[i]))
-    assert suspected_equity_token(equity, as_of)
+    assert suspected_equity_token(equity, as_of, "NVDAB")
+    assert not suspected_equity_token(equity, as_of, "BTC")  # 名字不以 B 结尾：不标记
     crypto = _float(start, 120, close=lambda i: float(100 * np.cumprod(1 + rng.normal(0, 0.02, 120))[i]))
-    assert not suspected_equity_token(crypto, as_of)
+    assert not suspected_equity_token(crypto, as_of, "SHIB")
 
 
 def test_assets_review_end_to_end(tmp_path: Path) -> None:

@@ -4,16 +4,19 @@
 # - 审核结果只通过人工编辑本文件生效，程序不得自动写入 approved。
 # approved_assets 的初稿由 M1-6 生成，交给用户审核后再填入。
 
-approved_assets: []
+# 初次审核（2026-11-01，Claude 代用户完成，依据 doc/assets_review/review_2026-10-31.md；用户可随时修改）：
+# 通过流动性筛选的待审核资产中，排除疑似股票/ETF 与疑似稳定币后全部批准。
+approved_assets: [BTC, ETH, SOL, ZEC, NEAR, XRP, BNB, SUI, DOGE, UNI, ENA, WLD, PEPE, TRX, PUMP, TAO, AVAX, ADA, QNT, LINK, AAVE, LTC, FET, ONDO, ZRO, ARB, INJ, HBAR, FIL, STRK, TIA, XLM, APT, DOT, BCH, TRUMP, GTC, ASTER, PENGU, ICP, GRAM, DASH, OP, SEI, AERO, XPL, ERA]
 
 excluded_assets:
   stablecoins_fiat: [USDC, FDUSD, TUSD, USDP, DAI, BUSD, USD1, USDE, BFUSD, XUSD, RLUSD, PAX, USDS, USDSB, SUSD, UST, USTC,
-                     EUR, EURI, AEUR, GBP, AUD, TRY, BRL, RUB, BIDR, IDRT, UAH, NGN, ZAR, PLN, RON, ARS, JPY, MXN, COP, CZK]
+                     EUR, EURI, AEUR, GBP, AUD, TRY, BRL, RUB, BIDR, IDRT, UAH, NGN, ZAR, PLN, RON, ARS, JPY, MXN, COP, CZK,
+                     U]  # U：2026-10 审核时 90 日波动 < 5% 且价格≈1
   wrapped_or_pegged: [WBTC, WBETH, BETH, PAXG, XAUT]
-  tokenized_stocks_etf: []    # 由 M1-6 根据当前 exchangeInfo 列出，交给用户确认
+  tokenized_stocks_etf: [SNDKB, SPCXB, SOXLB, CRCLB, MSTRB, MUB, NVDAB, SKHYB, INTCB, KORUB]  # 2026-10 审核：周末几乎不动且名为 xxxB
   other: []
 
 excluded_patterns:            # 正则，作用于 baseAsset
   - '^[A-Z0-9]+(UP|DOWN|BULL|BEAR)$'   # 杠杆代币
 
-pattern_exceptions: [JUP]              # 命中正则但不是杠杆代币的资产；完整名单由 M1-6 列出命中项后人工确认
+pattern_exceptions: [JUP, SYRUP]       # 命中正则但不是杠杆代币的资产（SYRUP 为 Maple Finance 代币）
