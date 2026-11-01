@@ -47,7 +47,9 @@ def test_constant_weight_known_answer(cfg: AppConfig) -> None:
     r = 0.01
     p = MarketPanel.from_frames({"AUSDT": frame(geometric(60, r))})
     opts = EngineOptions(initial_capital=1000, fee=0, slippage=0, ideal=True)
-    res = run_backtest(cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {"AUSDT": 0.5}))  # type: ignore[arg-type]
+    res = run_backtest(
+        cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {"AUSDT": 0.5})
+    )  # type: ignore[arg-type]
     n = len(p.dates) - 1  # 第一天收盘后才生成目标，第二天开盘建仓
     assert res.nav.iloc[-1] == pytest.approx((1 + 0.5 * r) ** n, rel=1e-9)
 
@@ -56,7 +58,9 @@ def test_costs_are_conserved(cfg: AppConfig) -> None:
     rng = np.random.default_rng(3)
     p = MarketPanel.from_frames({"AUSDT": frame(list(100 * np.cumprod(1 + rng.normal(0, 0.03, 80))))})
     opts = EngineOptions(initial_capital=1000, fee=0.001, slippage=0.0005, ideal=True)
-    res = run_backtest(cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {"AUSDT": 0.6}))  # type: ignore[arg-type]
+    res = run_backtest(
+        cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {"AUSDT": 0.6})
+    )  # type: ignore[arg-type]
     assert res.daily["cost"].sum() == pytest.approx(res.trades["notional"].sum() * 0.0015)
     assert res.trades["cost"].sum() == pytest.approx(res.daily["cost"].sum())
 
@@ -64,17 +68,23 @@ def test_costs_are_conserved(cfg: AppConfig) -> None:
 def test_delisted_position_exits_with_haircut(cfg: AppConfig) -> None:
     p = MarketPanel.from_frames({"AUSDT": frame(geometric(30, 0.0)), "BUSDT": frame(geometric(60, 0.0))})
     opts = EngineOptions(initial_capital=1000, fee=0, slippage=0, delist_haircut=0.5, ideal=True)
-    res = run_backtest(cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {"AUSDT": 0.4}))  # type: ignore[arg-type]
+    res = run_backtest(
+        cfg, p, p.dates[0].date(), p.dates[-1].date(), opts=opts, strategy=StubStrategy(p, {"AUSDT": 0.4})
+    )  # type: ignore[arg-type]
     assert len(res.delist_exits) == 1
     assert res.nav.iloc[-1] == pytest.approx(1 - 0.4 * 0.5)  # 价格不变：只损失 haircut
 
 
 def _market(n: int = 420, seed: int = 11) -> dict[str, pd.DataFrame]:
     rng = np.random.default_rng(seed)
-    frames = {"BTCUSDT": frame(list(100 * np.cumprod(1 + 0.002 + rng.normal(0, 0.03, n))), "2021-01-01", qv=5e9)}
+    frames = {
+        "BTCUSDT": frame(list(100 * np.cumprod(1 + 0.002 + rng.normal(0, 0.03, n))), "2021-01-01", qv=5e9)
+    }
     for i in range(8):
         drift = 0.003 - 0.001 * i
-        frames[f"C{i}USDT"] = frame(list(10 * np.cumprod(1 + drift + rng.normal(0, 0.05, n))), "2021-01-01", qv=1e8 * (i + 1))
+        frames[f"C{i}USDT"] = frame(
+            list(10 * np.cumprod(1 + drift + rng.normal(0, 0.05, n))), "2021-01-01", qv=1e8 * (i + 1)
+        )
     return frames
 
 

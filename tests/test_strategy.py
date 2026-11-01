@@ -17,7 +17,9 @@ from bot.strategy.smoothing import Overrides, StopWindow, smoothed_target
 def frame(close: list[float], start: str = "2024-01-01", qv: float = 1e8) -> pd.DataFrame:
     idx = pd.date_range(start, periods=len(close), freq="D")
     c = pd.Series(close, index=idx, dtype="float64")
-    return pd.DataFrame({"open": c.shift(1).fillna(c), "high": c * 1.01, "low": c * 0.99, "close": c, "quote_volume": qv})
+    return pd.DataFrame(
+        {"open": c.shift(1).fillna(c), "high": c * 1.01, "low": c * 0.99, "close": c, "quote_volume": qv}
+    )
 
 
 def geometric(n: int, r: float, p0: float = 100.0) -> list[float]:
@@ -54,7 +56,9 @@ def test_panel_splits_segments_into_columns() -> None:
 
 
 def test_regime_buffer_and_hold() -> None:
-    close = pd.Series([100.0] * 5 + [101.0, 103.0, 101.5, 97.0, 99.0], index=pd.date_range("2024-01-01", periods=10))
+    close = pd.Series(
+        [100.0] * 5 + [101.0, 103.0, 101.5, 97.0, 99.0], index=pd.date_range("2024-01-01", periods=10)
+    )
     r = regime_series(close, sma_period=5, buffer=0.02)
     # SMA≈100～101：101 不触发（< 1.02 × SMA），103 触发 RISK_ON，101.5 保持，97 触发 RISK_OFF
     assert list(r["state"].iloc[5:]) == ["RISK_OFF", "RISK_ON", "RISK_ON", "RISK_OFF", "RISK_OFF"]
@@ -64,7 +68,12 @@ def test_regime_buffer_and_hold() -> None:
 
 @pytest.mark.parametrize(
     ("raw", "expected_total"),
-    [({"a": 1.0}, 0.25), ({"a": 0.5, "b": 0.5}, 0.5), ({"a": 0.6, "b": 0.3, "c": 0.1}, 0.75), ({k: 0.2 for k in "abcde"}, 1.0)],
+    [
+        ({"a": 1.0}, 0.25),
+        ({"a": 0.5, "b": 0.5}, 0.5),
+        ({"a": 0.6, "b": 0.3, "c": 0.1}, 0.75),
+        ({k: 0.2 for k in "abcde"}, 1.0),
+    ],
 )
 def test_cap_weights(raw: dict[str, float], expected_total: float) -> None:
     w = cap_weights(raw, 0.25)
@@ -96,7 +105,15 @@ def test_core_target_vol_scaling() -> None:
 
 
 def _sat_cfg(**kw) -> XsMomentumSleeveConfig:  # type: ignore[no-untyped-def]
-    base = dict(type="xs_momentum", capital_weight=0.5, target_annual_vol=0.30, momentum_lookback=10, coin_sma_period=5, vol_lookback=10, top_n=2)
+    base = dict(
+        type="xs_momentum",
+        capital_weight=0.5,
+        target_annual_vol=0.30,
+        momentum_lookback=10,
+        coin_sma_period=5,
+        vol_lookback=10,
+        top_n=2,
+    )
     base.update(kw)
     return XsMomentumSleeveConfig(**base)  # type: ignore[arg-type]
 
@@ -152,7 +169,9 @@ def test_rank_universe_floor_age_and_exclusion() -> None:
     t = p.dates[-1]
     ucfg = UniverseConfig(universe_size=2, min_median_quote_volume=5e6, min_listing_days=90)
     assert rank_universe(p, t, ucfg, exclude_symbols={"BTCUSDT"}) == ["BIGUSDT", "MIDUSDT"]
-    assert rank_universe(p, t, ucfg, asset_ok=lambda c: c != "BIGUSDT", exclude_symbols={"BTCUSDT"}) == ["MIDUSDT"]
+    assert rank_universe(p, t, ucfg, asset_ok=lambda c: c != "BIGUSDT", exclude_symbols={"BTCUSDT"}) == [
+        "MIDUSDT"
+    ]
 
 
 def _raw_seq(day0: pd.Timestamp) -> object:
@@ -178,7 +197,9 @@ def test_smoothing_stop_excludes_old_vectors_only() -> None:
     raw = _raw_seq(pd.Timestamp("2024-01-01"))
     stop = StopWindow(pd.Timestamp("2024-03-01"), pd.Timestamp("2024-03-08"))
     ov = Overrides(stops={"A": stop})
-    kw = dict(risk_on=True, mode="smoothed", n=7, weekday=0, risk_on_mode="ramp", last_switch_on=None, overrides=ov)
+    kw = dict(
+        risk_on=True, mode="smoothed", n=7, weekday=0, risk_on_mode="ramp", last_switch_on=None, overrides=ov
+    )
     assert smoothed_target(raw, pd.Timestamp("2024-03-08"), **kw) == {}  # type: ignore[arg-type]
     # 冷却期结束后新算出的目标逐日纳入，旧目标不会让它"一次性买回"
     assert smoothed_target(raw, pd.Timestamp("2024-03-10"), **kw)["A"] == pytest.approx(0.7 * 2 / 7)  # type: ignore[arg-type]
@@ -192,6 +213,14 @@ def test_smoothing_weekly_uses_last_rebalance_day() -> None:
 
     t = pd.Timestamp("2024-03-14")  # 周四；最近的周一是 3/11
     out = smoothed_target(
-        raw, t, risk_on=True, mode="weekly", n=7, weekday=0, risk_on_mode="ramp", last_switch_on=None, overrides=Overrides()
+        raw,
+        t,
+        risk_on=True,
+        mode="weekly",
+        n=7,
+        weekday=0,
+        risk_on_mode="ramp",
+        last_switch_on=None,
+        overrides=Overrides(),
     )
     assert out == {"A": 11.0}
