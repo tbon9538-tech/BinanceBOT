@@ -11,7 +11,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 代码仓库 | `E:\projects1101\BinanceBOT`，分支 `master`，最新提交 `3cdbb6a`，共 35 个提交，**没有远端仓库、没有 tag** |
+| 代码仓库 | `E:\projects1101\BinanceBOT`，分支 `master`（提交历史见 `git log`），**没有远端仓库、没有 tag** |
 | 运行中 | Docker 容器 `binancebot-bot-1`（`docker compose up -d`，`run --daemon`），每天 00:10 UTC 运行一次，`env: demo` |
 | 未提交改动 | `.dockerignore` 新增一行 `dist`（不是本会话写的，用户尚未表态；改动本身合理） |
 | 研究 | E0～E11 完成；保留集**已运行过一次，不得再运行**；R2（多周期均线集成）未通过；试验累计 121 个 |
@@ -75,6 +75,8 @@ docker compose logs -f bot
 账户情况：
 - demo：5000 USDT + 5000 USDC 虚拟资金。USDC 记为外部基线；策略资金上限 500 USDT；已持有少量 BTC、INJ、PEPE。
 - testnet：预置了大量资产，全部记为外部基线；kill 演练后策略持仓为空，系统状态 RUNNING。
+
+换电脑接手时：`.env` 和 `data/`（尤其是 `state-demo.db`）都不在 git 中，要把整个项目目录复制过去。**同一时间只能有一处运行容器**：先在旧电脑执行 `docker compose down`，再在新电脑执行 `docker compose up -d --build`，否则两处会对同一个 demo 账户重复下单。
 
 ---
 
