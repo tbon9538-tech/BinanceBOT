@@ -7,7 +7,7 @@
 > 3. **`dev_plan.md` 中标为"检查点"的地方必须停下来**，等用户确认后再继续。尤其是：M2 研究结束后（确认参数）、保留集检验之后（确认是否进入 testnet）、首次 demo 连续运行之前。
 > 4. 开发与测试**只允许使用 `testnet` 或 `demo` 环境**。不得以 `env: live` 运行任何会下单的代码，也不要向用户索要 live API Key。
 > 5. 标为 **【待研究 Exx】** 的参数，先按默认值实现成可配置项。参数的取值由 `strategy_research.md` 中对应编号的实验决定，**开发者不得自行调参**。
-> 6. 本文档没有覆盖的细节，选择更保守、更安全的实现，并记录到 `docs/DECISIONS.md`（格式：日期、问题、选择、理由）。
+> 6. 本文档没有覆盖的细节，选择更保守、更安全的实现，并记录到 `doc/DECISIONS.md`（格式：日期、问题、选择、理由）。所有文档都放在 `doc/` 下，目录约定见 §11.1。
 > 7. 在项目根目录维护 `CLAUDE.md`，记录项目结构、常用命令（测试、回测、运行）以及本文档的关键约束，便于后续会话继续开发。
 > 8. **保留集纪律**：数据层必须拦截研究命令读取 `research.holdout_start`（2025-07-01）及之后的 K 线，见 §3.6。
 >
@@ -198,7 +198,7 @@ pattern_exceptions: [JUP, SUPER]                           # 命中正则但不�
 - 配置项 `research.holdout_start: "2025-07-01"`。
 - 研究类命令包括 `backtest`、`experiment`、`walkforward`、`bootstrap`。它们读取 K 线时，数据层必须过滤掉 `open_time ≥ holdout_start` 的行。
 - 命令的 `--end` 参数大于等于 `holdout_start` 时，直接报错退出。
-- 只有 `python -m bot holdout --final --confirm <当日日期>` 可以读取保留集。每次运行都追加记录到 `research/holdout_runs.log`，内容包括时间、git commit、配置哈希和结果摘要。日志里已有记录时，再次运行必须额外加 `--i-know-this-is-not-the-first-run`，并在报告中醒目标注"非首次运行"。
+- 只有 `python -m bot holdout --final --confirm <当日日期>` 可以读取保留集。每次运行都追加记录到 `doc/research/holdout_runs.log`，内容包括时间、git commit、配置哈希和结果摘要。日志里已有记录时，再次运行必须额外加 `--i-know-this-is-not-the-first-run`，并在报告中醒目标注"非首次运行"。
 - 实盘命令 `run` 不受这个限制。
 
 ### 3.7 时间
@@ -378,10 +378,11 @@ W_t(i) = Σ_{sleeve} capital_weight_sleeve × S_t^sleeve(i)
 
 ### 5.5 Kill Switch
 
-- **触发方式**：
-  - 命令行 `python -m bot kill`；
-  - 项目根目录下存在 `KILL` 文件。程序在每次运行开始时检查，并且在每一笔订单之前再检查一次；
-  - Telegram `/kill` 命令，只响应白名单 chat_id（是否启用见 Q5）。
+- **触发方式**（v1 的 Telegram 不接收任何命令，见 `open_questions.md` Q5，已选 C）：
+  - 命令行 `python -m bot kill`：**立即执行**，是远程紧急停止的标准方式（SSH 登录服务器后执行）。
+    - 进程锁空闲时，直接执行下面的动作；
+    - 进程锁被占用（有一次运行正在进行）时，先创建 `KILL` 文件，等待正在运行的进程在下一笔订单前停下并释放锁（最长等待 120 秒），再执行动作；超时仍拿不到锁则退出并提示，`KILL` 文件保留。
+  - 项目根目录下存在 `KILL` 文件：程序在每次运行开始时检查，并且在每一笔订单之前再检查一次；常驻模式（`app/daemon.py`）每 60 秒额外检查一次。**注意**：v1 没有常驻进程时，只创建 `KILL` 文件要等到下一次运行（或正在进行的运行的下一笔订单前）才生效；需要立即停止时用 `python -m bot kill`。
 - **动作**：
   1. 撤销本策略的全部挂单，按 clientOrderId 前缀识别；
   2. 卖出全部受管资产：使用 IOC，滑点上限为 `execution.kill_slippage`（默认 0.01），最多尝试 3 次；
@@ -473,12 +474,31 @@ cur_val  = 数量（free + locked）× mid
 tgt_val  = W_t(i) × C
 cw       = cur_val / C
 delta    = tgt_val − cur_val
-跳过条件：
-  a) tgt_val > 0 且 |W_t(i) − cw| < rebalance.threshold（0.02）
-  b) |delta| < max(rebalance.min_trade_usdt（10）, minNotional × 1.1)
+跳过条件（由 bot/strategy/rebalance.py 中的纯函数 should_skip 统一判断，见下文）：
+  a) 容忍带，仅在 tgt_val > 0 时适用：
+     threshold_mode == "absolute"：|W_t(i) − cw| < rebalance.threshold（0.02）
+     threshold_mode == "relative"：|W_t(i) − cw| < rebalance.threshold_rel（0.25）× max(W_t(i), cw)
+  b) 金额下限，两种模式都适用：|delta| < max(rebalance.min_trade_usdt（10）, minNotional × 1.1)
      例外：tgt_val == 0 时，只要持仓市值 ≥ minNotional，就卖出全部
   c) tgt_val == 0 且持仓市值 < minNotional：记为灰尘（dust），不下单
 ```
+
+**容忍带模式**【待研究 E8】：`rebalance.threshold_mode` 取 `absolute` 或 `relative`，暂定默认 `relative`。理由：核心–卫星结构下，卫星单币的目标权重只有约 3%～4%（袖子资金 0.5 × 单币 1/5，再乘以波动率目标缩放），绝对阈值 0.02 相当于单币仓位的一半以上，叠加 7 日平滑后大部分调整都会被跳过。最终默认值由 E8 决定。
+
+**共用跳过函数**：研究引擎（§9.3）与订单计划必须调用同一个函数，禁止各写一份：
+
+```python
+# bot/strategy/rebalance.py
+class SkipReason(Enum):
+    TOLERANCE_BAND = "tolerance_band"   # 条件 a
+    BELOW_MIN_TRADE = "below_min_trade" # 条件 b
+    DUST = "dust"                       # 条件 c
+
+def should_skip(target_w: float, current_w: float, delta_usdt: float, position_usdt: float,
+                min_notional_usdt: float, cfg: RebalanceConfig) -> SkipReason | None: ...
+```
+
+研究引擎中 `min_notional_usdt` 取 5（历史过滤器无法获得的近似值），实盘取执行环境 exchangeInfo 的 `NOTIONAL.minNotional`。每次跳过都按原因计数，写入回测报告和日报。
 
 **卖单**：
 
@@ -573,7 +593,7 @@ v1 只用 IOC，正常情况下不会留下挂单。第 4 步对账时，如果�
 ### 6.9 手续费与灰尘
 
 - 每笔成交都记录 `commission` 和 `commissionAsset`。成本统计统一按成交时的价格折算成 USDT。
-- 是否开启 BNB 抵扣，见 `open_questions.md` Q8，v1 默认关闭。如果开启，BNB 余额作为"手续费储备"，不计入策略持仓，单独显示。
+- 是否开启 BNB 抵扣，见 `open_questions.md` Q8，v1 默认关闭。如果开启，BNB 余额作为"手续费储备"，不计入策略持仓，单独显示；同时必须处理 BNB 也可能被卫星袖子选中的冲突（从 `approved_assets` 移除，或分开记账），见 §16。
 - 灰尘：持仓市值低于 `minNotional`，或数量低于 `minQty` 时，无法卖出。灰尘仍然计入净值，在日报中列出。之后如果再买入同一个币，灰尘会自然合并。
 
 ---
@@ -652,30 +672,39 @@ v1 没有常驻状态，所以不需要单独的"初始化 tranche"步骤：§4.
 
 - 信号使用 t 日收盘数据，在 **t+1 日开盘价**成交。止损同样在 t 日收盘判断、t+1 日开盘成交。
 - 单边成本 = `fee`（0.001）+ `slippage`（0.0005），都可配置。E9 实验会加入按成交额排名分档的滑点。
-- 初始资金为 `backtest.initial_capital`（1000 USDT）。应用 `rebalance.threshold`、`min_trade_usdt`，以及 5 USDT 的最小下单额（这是近似：历史上的过滤器无法获得），数量允许为小数。
+- 初始资金为 `backtest.initial_capital`（默认 1000 USDT）。是否调仓由 §6.3 的共用函数 `should_skip` 判断（容忍带、`min_trade_usdt`、5 USDT 最小下单额近似），数量允许为小数。
+- **按真实资金量回测**（E9）：`initial_capital` 分别取 500 和 2000 USDT，严格应用最小下单额、`min_trade_usdt` 和容忍带，并与"理想情况"（`min_trade_usdt = 0`、最小下单额 = 0、不设容忍带）对比，报告收益和跟踪误差的偏差，以及实际调仓频率。
 - 标的池按**当时**的数据逐日计算，包含已下架的币，`approved_assets` 按 §2.2 第 5 条近似。
 - **下架处理**：持仓币所在的交易段结束（之后再没有日线）时，在最后一根日线按 `close × (1 − delist_haircut)` 退出。`delist_haircut` 默认 0.5【待研究】，这是保守假设。
 - 回测的 NAV 每天按收盘价估值。
 
-### 9.4 输出（`reports/<run_name>/`）
+### 9.4 输出
+
+- 完整报告写入 `reports/<run_name>/`，**不进 git**。
+- 每个正式实验的 `summary.md` 和关键图表（权益曲线、热力图）复制到 `doc/research/reports/<实验编号>/` 并提交（由 `experiment` 命令自动完成）。
+
+报告内容：
 
 - `summary.json` 与 `summary.md`：§1.2 的全部指标；分年度收益表（必须包含 2022 年）；前、后半段对比；单日跌幅 ≤ −10% 和 ≤ −15% 的天数；最长回撤持续时间；平均仓位；空仓天数占比；换手率；总成本；下架退出的次数。
 - **Regime 区间表**：每个 Risk-On 区间的起止日期、天数、策略收益、BTC 收益。
 - **最大 5 段回撤表**：峰值日、谷底日、恢复日、回撤幅度。
 - `equity.png`：策略与 §1.3 四个基准的权益曲线，使用对数坐标，并附回撤子图。
 - `daily.csv`：每日的 NAVu、各袖子权重、W_t、换手、成本。
-- `trials.csv`（研究日志附件）：本次实验的全部配置及结果，用于计算 DSR。
+- **调仓统计**：按袖子统计实际调仓频率（每月平均交易笔数、平均每笔金额），以及被 `should_skip` 跳过的次数和原因分布；卫星袖子必须单独列出。
+- 试验记录追加到 `doc/research/trials.csv`：本次实验的全部配置及结果，用于计算 DSR。
 
 ### 9.5 研究命令
 
 | 命令 | 说明 |
 |---|---|
 | `python -m bot backtest --config ... --start 2020-01-01 --end 2025-06-30 --name xxx` | 单次回测 |
-| `python -m bot experiment --id E3a` | 读取 `research/experiments.yaml` 中定义的网格，逐个运行，结果追加到 `research/trials.csv` 和研究日志 |
+| `python -m bot experiment --id E3a` | 读取 `doc/research/experiments.yaml` 中定义的网格，逐个运行，结果追加到 `doc/research/trials.csv`；摘要复制到 `doc/research/reports/E3a/`；结论由人写入 `doc/research/log.md` |
 | `python -m bot walkforward --train-months 12 --test-months 3 --choose target_annual_vol,core_weight` | 滚动训练与检验 |
 | `python -m bot bootstrap --block-days 30 --n 1000` | 最大回撤的 block bootstrap 分布 |
 | `python -m bot holdout --final --confirm YYYY-MM-DD` | 保留集一次性检验（§3.6） |
-| `python -m bot dsr --trials research/trials.csv` | 计算 Deflated Sharpe Ratio |
+| `python -m bot dsr --trials doc/research/trials.csv` | 计算 Deflated Sharpe Ratio |
+
+v1 的统计工具只保留 DSR、block bootstrap 和保留集检验；PBO/CSCV 放入后续版本（§16）。
 
 ### 9.6 回测正确性（必须有测试，详见 `dev_plan.md` §6.2）
 
@@ -752,8 +781,10 @@ sleeves:
     rebalance_weekday: 0
 
 rebalance:
-  threshold: 0.02
-  min_trade_usdt: 10
+  threshold_mode: relative    # absolute | relative【待研究 E8】
+  threshold: 0.02             # absolute 模式：|W − cw| < threshold 时跳过
+  threshold_rel: 0.25         # relative 模式：|W − cw| < threshold_rel × max(W, cw) 时跳过
+  min_trade_usdt: 10          # 两种模式都生效
   run_time_utc: "00:10"       # 供常驻模式和部署脚本使用
 
 risk:
@@ -789,8 +820,8 @@ research:
   holdout_start: "2025-07-01"
 
 notify:
-  telegram_enabled: true      # 没有配置 token 时自动降级为只写日志
-  telegram_commands: [kill]   # 见 open_questions Q5
+  telegram_enabled: true      # 只发通知，不接收命令（Q5 选 C）；没有配置 token 时自动降级为只写日志
+  heartbeat_url: null         # M6：每次运行成功后 ping，例如 https://hc-ping.com/<uuid>；null 表示关闭
   daily_report: true
 
 logging:
@@ -850,6 +881,7 @@ bot/
     sleeves.py             # 核心袖子与卫星袖子的 D_t（§4.3）
     smoothing.py           # S_t（§4.4）
     portfolio.py           # W_t 与 cap_weights（§4.5）
+    rebalance.py           # should_skip：研究引擎与订单计划共用的跳过判断（§6.3）
     base.py                # Strategy Protocol
     momentum_v1.py         # 本策略：组合上面各模块，实现 Strategy
   risk/
@@ -864,21 +896,30 @@ bot/
   persistence/
     models.py, repo.py, migrations/
   notify/
-    telegram.py
+    telegram.py            # 只发送通知（sendMessage），不接收命令
+    heartbeat.py           # M6：外部心跳 ping
   backtest/
-    engine.py, replay.py, sim_account.py, report.py, research.py, stats.py (DSR/PBO/bootstrap)
+    engine.py, replay.py, sim_account.py, report.py, research.py, stats.py (DSR/bootstrap)
   app/
     run_once.py            # §6.2 编排
     daemon.py              # 可选的常驻模式：按 run_time_utc 每日调用 run_once
 config/
   config.yaml
   assets.yaml
-research/
-  experiments.yaml
-  log.md                   # 研究日志（见 dev_plan §4）
-  trials.csv
+doc/                       # 全部文档
+  DECISIONS.md             # 设计与技术决策记录
+  binance_momentum_bot_spec.md  dev_plan.md  strategy_review.md  strategy_research.md  open_questions.md
+  research/
+    log.md                 # 研究日志（见 dev_plan §4）
+    experiments.yaml       # 实验网格定义
+    trials.csv             # 全部试验记录（DSR 用）
+    holdout_runs.log       # 保留集运行记录
+    proposal_v1.md         # M3 结束时的参数提案
+    reports/<实验编号>/     # 每个实验的 summary.md 与关键图表（提交）
+    scratch/               # 文档阶段的一次性探索脚本
+reports/                   # 完整回测报告（不进 git）
+scripts/                   # check.ps1 / check.sh、drills/
 tests/
-docs/DECISIONS.md
 .env.example  .gitignore  requirements.txt (或 pyproject.toml)  README.md  CLAUDE.md  Dockerfile
 ```
 
@@ -953,7 +994,8 @@ class Transfer(Protocol):           # 第二阶段：现货 ↔ U 本位合约�
 ## 12. 告警与日志
 
 - 日志按天滚动写入文件，同时输出到控制台，保留 90 天。**日志里不得出现密钥、签名或完整的 API Key**。API Key 只显示前 4 位和后 4 位。所有日志经过同一个过滤器统一处理。
-- Telegram 只用到 `sendMessage` 接口。没有配置 token 时，只写日志，不报错。
+- Telegram 只用到 `sendMessage` 接口，**只发通知，不接收任何命令**（Q5 选 C）。没有配置 token 时，只写日志，不报错。
+- **外部心跳**（M6）：每次运行结束且 run 状态为 `DONE` 时，请求一次 `notify.heartbeat_url`（例如 healthchecks.io 的 ping 地址），超时 10 秒，失败只记录 WARN，不影响运行。外部服务在约定周期（例如 26 小时）内没有收到 ping 时由它发出告警。这弥补了 `MISSED_RUN` 的盲区：程序没有运行时，它自己无法告警。
 
 | 告警类型 | 级别 | 触发条件 |
 |---|---|---|
@@ -979,7 +1021,7 @@ class Transfer(Protocol):           # 第二阶段：现货 ↔ U 本位合约�
   2. 控制台输入 `YES` 确认（Docker 环境用 `--yes` 跳过这一步，但第 1 条不能省略）；
   3. 配置中 `max_capital_usdt` 已显式设置。
 - `.env`、`data/`、`logs/`、`reports/`、`*.pem` 加入 `.gitignore`。Ed25519 私钥文件的权限检查只在 Linux 上执行：权限宽于 600 时给出警告。
-- 所有外部请求只发往本文档列出的域名，以及 Telegram 的 `api.telegram.org`。
+- 所有外部请求只发往本文档列出的域名，以及：Telegram 的 `api.telegram.org`；心跳服务 healthchecks.io 的 ping 域名 `hc-ping.com`（M6 实现时对照其官方文档核实；改用其他心跳服务时，必须先更新本列表）。
 
 ---
 
@@ -992,7 +1034,8 @@ class Transfer(Protocol):           # 第二阶段：现货 ↔ U 本位合约�
    - 大盘状态机：缓冲带、重放结果的确定性；
    - 卫星和核心袖子的 D_t；`cap_weights`；波动率目标；
    - 平滑窗口 S_t：Risk-Off 清零、止损剔除和冷却期结束后的行为、`ramp` 与 `immediate` 两种模式；
-   - 订单计划：容忍带、最小金额、先卖后买、资金不足时按比例缩小；
+   - `should_skip`：absolute 与 relative 两种模式、金额下限、灰尘，以及研究引擎与订单计划调用的是同一个函数；
+   - 订单计划：最小金额、先卖后买、资金不足时按比例缩小；
    - clientOrderId：格式、长度、重启后序号继续递增；
    - **执行状态未知的处理**：用 mock 覆盖超时后查到订单、超时后查不到、5xx、`-1007` 这几种情况；
    - NAV 份额与出入金；回撤熔断与数据健全性检查；kill 流程；
@@ -1020,7 +1063,9 @@ class Transfer(Protocol):           # 第二阶段：现货 ↔ U 本位合约�
 | 版本 | 内容 | 前置条件 |
 |---|---|---|
 | v1.1 | `maker_then_ioc` 执行模式 | testnet/demo 运行稳定 2 周 |
-| v1.1 | Telegram `/status`、`/pause`、`/resume` 命令 | Q5 |
+| v1.1+ | Telegram 命令（`/status`、`/pause`、`/resume`、`/kill`） | 需要常驻进程才能及时响应；v1 已选 Q5-C |
+| v1.1+ | 研究工具：PBO/CSCV（回测过拟合概率） | v1 只保留 DSR、block bootstrap 和保留集检验 |
+| 上 live 前评估 | 开启 BNB 手续费抵扣（Q8 选 B） | 必须先把 BNB 从卫星袖子的 `approved_assets` 中移除，或者把"手续费储备 BNB"与"策略持仓 BNB"分开记账 |
 | v1.1 | BNB 手续费抵扣与 BNB 储备管理 | Q8 |
 | v1.2 | User Data Stream（WebSocket API `userDataStream.subscribe.signature`），用于实时成交回报 | 有了日内执行需求时再做 |
 | v1.2 | USDT 活期理财（方案 F） | 先完成接口 spike |
@@ -1077,7 +1122,19 @@ class Transfer(Protocol):           # 第二阶段：现货 ↔ U 本位合约�
 | 25 | 过滤器：去掉 `MIN_NOTIONAL` 主路径，新增 `PERCENT_PRICE_BY_SIDE` 校验和收窄，全部计算使用 Decimal | review §7.4 |
 | 26 | 限频：限额从 exchangeInfo 读取；遇到 429/418 时整个进程退避 | review §7.6 |
 | 27 | 回测：必须包含已下架币；数据源解析规则（没有表头、微秒时间戳、CHECKSUM）；下架时按 haircut 退出；两层引擎（研究引擎 + 执行回放） | R-35、R-37 |
-| 28 | 研究流程：v2 的 2,160 组全量网格改为"一次只改一个变量"的预注册实验（E0–E11），并加入 DSR/PBO 和保留集守卫 | R-36 |
+| 28 | 研究流程：v2 的 2,160 组全量网格改为"一次只改一个变量"的预注册实验（E0–E11），并加入 DSR 和保留集守卫（PBO 见下方 v3 修订 #5） | R-36 |
 | 29 | 架构：所有表加上 `strategy_id`/`account_id`；新增 `AccountType`、`InstrumentKey`、`TargetPortfolio`，预留 `FuturesAccount` 和 `Transfer` 接口；运行模式改为幂等的 `run --once` | R-40、R-41 |
 | 30 | 环境说明：testnet 已有 500 多个 USDT 交易对，没有 `/sapi`，约每月重置一次；demo 环境的说明与限制 | review §7.2 |
 | 31 | 开发阶段计划移到 `dev_plan.md`，新增后续版本清单和风险提示的更新 | 用户要求 |
+
+### v3 修订（2026-11-01，M0 开工前）
+
+| # | 变更 | 原因 |
+|---|---|---|
+| 1 | Telegram 只发通知、不接收命令；远程紧急停止改为 SSH 执行 `python -m bot kill`（立即执行；有运行在进行时先写 `KILL` 文件再等锁）（§5.5、§10.1、§12） | 用户决定 Q5 选 C：v1 没有常驻进程，`/kill` 无法及时响应 |
+| 2 | 调仓容忍带新增 `threshold_mode: absolute / relative`（`threshold_rel` 默认 0.25），`min_trade_usdt` 两种模式都保留；研究引擎与订单计划共用 `should_skip`；默认值由 E8 决定（§6.3、§9.3、§10.1） | 核心–卫星结构下卫星单币权重只有约 3%～4%，绝对阈值 0.02 过粗 |
+| 3 | 回测报告新增调仓统计（实际调仓频率、跳过原因）；E9 新增 500 / 2000 USDT 真实资金量回测（§9.3、§9.4） | 量化小资金下最小下单额和容忍带的影响 |
+| 4 | 目录统一：文档全部在 `doc/`；`DECISIONS.md`、研究日志、`experiments.yaml`、`trials.csv`、`holdout_runs.log` 放在 `doc/` 或 `doc/research/`；完整报告不进 git，实验摘要复制到 `doc/research/reports/`（§3.6、§9.4、§9.5、§11.1） | 用户要求 |
+| 5 | 统计工具精简为 DSR、block bootstrap、保留集检验；PBO/CSCV 移到后续版本（§9.5、§16） | 用户要求，降低 v1 工作量 |
+| 6 | 新增外部心跳（M6，`notify.heartbeat_url`），`hc-ping.com` 加入允许域名（§12、§13） | 程序没运行时无法自我告警 |
+| 7 | 后续版本清单新增 BNB 抵扣与 `approved_assets` 冲突的处理要求（§6.9、§16） | 用户要求 |

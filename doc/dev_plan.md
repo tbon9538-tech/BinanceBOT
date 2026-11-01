@@ -37,13 +37,13 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 
 | ID | 任务 | 输入 | 输出 | 验收 |
 |---|---|---|---|---|
-| M0-1 | 仓库骨架 | spec §11.1 | 目录结构、`pyproject.toml`（Python 3.11+）、`.gitignore`、`CLAUDE.md`、`docs/DECISIONS.md` | `pytest` 可以运行（0 个测试也算通过）；`python -m bot --help` 能列出全部子命令（实现为占位即可） |
+| M0-1 | 仓库骨架 | spec §11.1 | 目录结构；用 **uv** 管理 Python 版本与依赖：`pyproject.toml`、`uv.lock`、`.python-version`；依赖包含 `filelock`（跨平台进程锁），开发依赖包含 `hypothesis`、`pytest-socket`；`.gitignore`、`CLAUDE.md`、`doc/DECISIONS.md` | `uv sync` 可以从锁文件复现环境；`uv run pytest` 可以运行；`uv run python -m bot --help` 能列出全部子命令（实现为占位即可） |
 | M0-2 | 配置模型 | spec §10 | `bot/config.py`（pydantic），以及 `config/config.yaml` 和 `config/assets.yaml` 的模板 | 测试覆盖 §10.1 的全部校验规则；非法配置给出可读的报错 |
-| M0-3 | 领域类型 | spec §11.2 | `bot/domain/types.py`、`bot/exchange/base.py`、`bot/strategy/base.py`（Protocol） | mypy 或 pyright 在 `bot/` 下零报错（类型检查工具只选一种） |
-| M0-4 | CI 与代码规范 | — | ruff 配置，pre-commit 或 Makefile（在 Windows 下用 `scripts/check.ps1`） | 本地一条命令即可运行 lint、类型检查和测试 |
-| M0-5 | 确认阻塞问题 | `open_questions.md` | 决策写入 `docs/DECISIONS.md` | Q0、Q1、Q4、Q9、Q10 已有答复 |
+| M0-3 | 领域类型 | spec §11.2 | `bot/domain/types.py`、`bot/exchange/base.py`、`bot/strategy/base.py`（Protocol） | 类型检查在 `bot/` 下零报错（工具选定为 mypy，理由见 `doc/DECISIONS.md`） |
+| M0-4 | CI 与代码规范 | — | ruff 与 mypy 配置；`scripts/check.ps1`（Windows）和 `scripts/check.sh`（Linux/WSL）；pytest 默认 `--disable-socket`（pytest-socket） | 本地一条命令即可运行 lint、类型检查和测试；测试中访问网络会直接失败 |
+| M0-5 | 确认阻塞问题 | `open_questions.md` | 决策写入 `doc/DECISIONS.md` | Q0、Q1、Q4、Q9、Q10 已有答复（2026-11-01 已全部确认，其余问题也已记录） |
 
-**检查点 C0**：骨架提交之后，向用户汇报，并确认 Q0、Q1、Q4、Q9、Q10。用户没有答复时，**停止工作**。
+**检查点 C0**：骨架提交之后，向用户汇报 M0 的结果（Q0、Q1、Q4、Q9、Q10 已于 2026-11-01 确认）。用户确认之前，不开始 M1/M5。
 
 ### M1 数据层
 
@@ -67,17 +67,18 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 | M2-4 | 袖子的 D_t | spec §4.3 | `strategy/sleeves.py`、`portfolio.py`（含 `cap_weights`） | 用人造数据验证：候选过滤的每一个条件、`cap_weights` 的边界（k=1、2、3）、波动率目标在 σ=0 时的处理 |
 | M2-5 | 平滑 S_t 与组合 W_t | spec §4.4、§4.5 | `strategy/smoothing.py`、`momentum_v1.py` | Risk-Off 当天清零；`ramp` 与 `immediate` 两种模式；止损剔除和冷却期结束后不买回；`weekly` 模式；`n=1` 时等价于每日调仓 |
 | M2-6 | 研究引擎 | spec §9.1、§9.3 | `backtest/engine.py` | 通过 §6.2 的全部回测正确性测试 |
-| M2-7 | 报告与统计 | spec §9.4 | `backtest/report.py`、`stats.py`（DSR、PBO/CSCV、block bootstrap） | 用已知分布的模拟收益验证统计函数（例如 iid 正态收益的 DSR 结果符合预期） |
-| M2-8 | 实验框架 | spec §9.5 | `backtest/research.py`、`research/experiments.yaml`、`research/log.md` 模板、`research/trials.csv` | `python -m bot experiment --id E1` 能运行网格，并自动把结果追加到 trials.csv |
+| M2-7 | 报告与统计 | spec §9.4 | `backtest/report.py`（含按袖子的调仓统计）、`stats.py`（DSR、block bootstrap；PBO/CSCV 放后续版本） | 用已知分布的模拟收益验证统计函数（例如 iid 正态收益的 DSR 结果符合预期） |
+| M2-8 | 实验框架 | spec §9.5 | `backtest/research.py`、`doc/research/experiments.yaml`、`doc/research/log.md` 模板、`doc/research/trials.csv` | `python -m bot experiment --id E1` 能运行网格，自动把结果追加到 trials.csv，并把 `summary.md` 和关键图表复制到 `doc/research/reports/E1/` |
+| M2-9 | 共用跳过函数 | spec §6.3 | `strategy/rebalance.py`：`should_skip`（absolute / relative 两种容忍带模式、金额下限、灰尘） | 两种模式的边界值测试；研究引擎通过这个函数判断是否调仓（M5-6 的订单计划也必须调用它，由测试检查） |
 
 ### M3 研究实验（详见 §3）
 
 | ID | 任务 | 输入 | 输出 | 验收 |
 |---|---|---|---|---|
 | M3-1 | E0 引擎交叉校验 | `doc/research/scratch/` | 研究日志中记录"正式引擎 vs 探索脚本"的差异 | 差异能够逐项解释 |
-| M3-2 | E1～E9 | `strategy_research.md` | 每个实验一份报告，结论写入 `research/log.md` | 每个结论都注明是否满足 `strategy_research.md` §0.3 的判定标准 |
-| M3-3 | E10 稳健性汇总 | — | DSR、PBO、walk-forward、bootstrap 报告 | 汇总表 |
-| M3-4 | 参数提案 | — | `research/proposal_v1.md`：最终配置、每个参数的经济学解释、证据、试验总次数 | — |
+| M3-2 | E1～E9 | `strategy_research.md` | 每个实验一份报告，摘要提交到 `doc/research/reports/<编号>/`，结论写入 `doc/research/log.md` | 每个结论都注明是否满足 `strategy_research.md` §0.3 的判定标准 |
+| M3-3 | E10 稳健性汇总 | — | DSR、walk-forward、block bootstrap 报告 | 汇总表 |
+| M3-4 | 参数提案 | — | `doc/research/proposal_v1.md`：最终配置、每个参数的经济学解释、证据、试验总次数 | — |
 
 **检查点 C1**：把 `proposal_v1.md` 和全部实验报告交给用户。**用户确认参数之前，不得运行保留集检验。**
 
@@ -85,7 +86,7 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 
 | ID | 任务 | 输入 | 输出 | 验收 |
 |---|---|---|---|---|
-| M4-1 | E11 一次性检验 | 用户确认后的配置（配置哈希写入日志） | `reports/holdout_final/`，`research/holdout_runs.log` 中新增一条记录 | 只运行一次；报告与研究集的报告格式相同；**无论结果好坏都不改参数** |
+| M4-1 | E11 一次性检验 | 用户确认后的配置（配置哈希写入日志） | `reports/holdout_final/`（摘要复制到 `doc/research/reports/E11/`），`doc/research/holdout_runs.log` 中新增一条记录 | 只运行一次；报告与研究集的报告格式相同；**无论结果好坏都不改参数** |
 
 **检查点 C2**：汇报保留集的结果，由用户决定"进入 demo 前向运行 / 退化为纯 BTC 趋势 / 回到研究"。判定参考 `strategy_research.md` §4 的退化路径。
 
@@ -98,10 +99,10 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 | M5-3 | 过滤器与取整 | spec §6.3 | `rules.py` 的校验与取整 | **属性测试**（hypothesis）：任意价格和数量取整后都能通过全部过滤器，或者被明确拒绝；买价向下取整、卖价向上取整 |
 | M5-4 | 持久化 | spec §8 | `persistence/` | 迁移可以重复执行；WAL 模式；`id_sequences` 在并发和重启后都不会重复 |
 | M5-5 | clientOrderId | spec §6.4 | `execution/client_order_id.py` | 长度 ≤36；字符集正确；symbol 中含 Unicode 字符时依然合法 |
-| M5-6 | 订单计划 | spec §6.3 | `execution/planner.py` | 容忍带、最小金额、灰尘、先卖后买、资金不足时按比例缩小，每种情况都有测试 |
+| M5-6 | 订单计划 | spec §6.3 | `execution/planner.py`（是否调仓只通过 M2-9 的 `should_skip` 判断） | 容忍带（两种模式）、最小金额、灰尘、先卖后买、资金不足时按比例缩小，每种情况都有测试 |
 | M5-7 | 执行器 | spec §6.5～§6.8 | `execution/spot_executor.py` | **未知状态处理的全部分支**都有 mock 测试；绝不会出现"同一意图用新 ID 重下"的路径 |
 | M5-8 | run_once 编排 | spec §6.2 | `app/run_once.py` | 用 `SimSpotAccount` 跑通端到端的单元测试；同一运行日运行两次，第二次不交易 |
-| M5-9 | testnet 联调 | testnet Key（用户提供，放在 `.env`） | 联调记录（日志和数据库截图，写入 `docs/testnet_log.md`） | spec §14 第 3 条：`--force-rebalance` 成功；紧接着再运行一次，没有重复下单 |
+| M5-9 | testnet 联调 | testnet Key（用户提供，放在 `.env`） | 联调记录（日志和数据库截图，写入 `doc/testnet_log.md`） | spec §14 第 3 条：`--force-rebalance` 成功；紧接着再运行一次，没有重复下单 |
 
 ### M6 风控、通知与演练
 
@@ -109,11 +110,12 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 |---|---|---|---|---|
 | M6-1 | NAV 记账 | spec §5.2 | `risk/ledger.py`、`capital` 子命令 | 出入金前后单位净值不变；无法解释的余额变化会触发保护 |
 | M6-2 | 守卫 | spec §5.1、§5.3～§5.6 | `risk/guards.py` | 每个状态转移都有测试；数据异常时**不清仓** |
-| M6-3 | Kill switch | spec §5.5 | `risk/killswitch.py`、`kill` 子命令、`KILL` 文件检查 | 下单循环中途出现 KILL 文件时，下一笔订单之前就停止 |
+| M6-3 | Kill switch | spec §5.5 | `risk/killswitch.py`、`kill` 子命令（立即执行；有运行在进行时先写 `KILL` 文件、等锁最多 120 秒）、`KILL` 文件检查 | 下单循环中途出现 KILL 文件时，下一笔订单之前就停止；`kill` 在锁空闲和锁被占用两种情况下都有测试 |
 | M6-4 | 止损模块（默认关闭） | spec §5.7 | `risk/stops.py` | 启用后行为与 M2-5 的剔除逻辑一致 |
-| M6-5 | 通知与日志 | spec §12 | `notify/telegram.py`、日志过滤器 | 测试：日志中不出现密钥（扫描测试日志输出）；没有 token 时自动降级 |
+| M6-5 | 通知与日志 | spec §12 | `notify/telegram.py`（只发通知，不接收命令，Q5 选 C）、日志过滤器 | 测试：日志中不出现密钥（扫描测试日志输出）；没有 token 时自动降级；代码中没有任何 Telegram 更新轮询 |
 | M6-6 | 执行回放 | spec §9.1 | `backtest/replay.py`、`sim_account.py` | 60～120 天回放与研究引擎的 NAV 差异 < 1%，差异来源有说明 |
 | M6-7 | 故障演练 | spec §14 第 4 条 | `scripts/drills/*.py` 与 README 步骤 | 5 项演练全部通过，并有记录 |
+| M6-8 | 外部心跳 | spec §12、§13 | `notify/heartbeat.py`：每次 run 状态为 DONE 后请求 `notify.heartbeat_url`（例如 healthchecks.io）；README 中说明如何在心跳服务上设置周期与告警 | ping 失败只记录 WARN、不影响运行；`heartbeat_url` 为 null 时不发请求；只允许 spec §13 列出的域名 |
 
 **检查点 C3**：汇报 testnet 联调和故障演练的结果。用户确认后，才进入 demo 前向运行。
 
@@ -136,7 +138,7 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 - 研究集为 2020-01-01～2025-06-30；补充检验区间为 2018-06-01～2019-12-31。
 - 基线是 spec v3 的默认配置。
 - 每个实验通过之后，以**通过的配置**作为下一个实验的基线；没有通过时，保持原基线不变。
-- 每个实验开始前，先在 `research/log.md` 写下假设、经济学理由、取值网格和通过标准（即"预注册"），然后才能运行。
+- 每个实验开始前，先在 `doc/research/log.md` 写下假设、经济学理由、取值网格和通过标准（即"预注册"），然后才能运行。
 
 | 顺序 | 编号 | 内容 | 网格（配置数） | 主要指标 | 通过标准 |
 |---|---|---|---|---|---|
@@ -150,9 +152,9 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 | 8 | E6 | 止损 + 单币灾难压力测试 | 5×3 + 压力测试 | MDD、灾难事件中的损失 | research 方案 E |
 | 9 | E4a～c | 目标波动、波动率窗口、top_n 与加权方式 | 5 + 4 + 6 = 15 | bootstrap 下 MDD 的 80 分位、Sharpe | 目标波动按风险约束确定；其余参数按 research §0.3 |
 | 10 | E7 | 核心–卫星权重；核心资产 | 5×2 = 10 | 前后半段的最小 Sharpe、Calmar | research 方案 A |
-| 11 | E8 | 调仓时点：tranches、单一调仓日 | 7 + 3 | 不同调仓日之间的离散程度 | 平滑模式下的离散程度明显更小 |
-| 12 | E9 | 成本压力 | 3 + 分档滑点 | 夏普 / Calmar 的下降幅度 | 成本 ×2 时仍满足 spec §1.1 的硬约束 |
-| 13 | E10 | DSR、PBO、walk-forward、bootstrap | — | DSR（试验数 = trials.csv 的总行数）、PBO | DSR > 0.9 为"强"，0.5～0.9 为"弱"；PBO < 0.3 |
+| 11 | E8 | 调仓时点：tranches、单一调仓日；**容忍带模式**：absolute（0.02）vs relative（`threshold_rel` ∈ {0.15, 0.25, 0.40}） | 7 + 3 + 4 | 不同调仓日之间的离散程度；Sharpe、成本、跟踪误差（相对于不设容忍带）；**卫星袖子的实际调仓频率**（每月交易笔数、平均每笔金额、跳过原因分布） | 平滑模式下的离散程度明显更小；容忍带模式与 `threshold_rel` 的默认值由本实验决定：在成本相当时选跟踪误差更小的，差异在噪声内时选 relative 0.25 |
+| 12 | E9 | 成本压力；**按真实资金量回测**：`initial_capital` ∈ {500, 2000} USDT，严格应用最小下单额、`min_trade_usdt` 和容忍带 | 3 + 分档滑点 + 2×2（两种资金量 × 真实/理想） | 夏普 / Calmar 的下降幅度；真实与理想情况的收益差和跟踪误差；实际调仓频率 | 成本 ×2 时仍满足 spec §1.1 的硬约束；500 USDT 下与理想情况的年化收益差 < 2 个百分点，否则在报告中给出建议的最低资金量 |
+| 13 | E10 | DSR、walk-forward、block bootstrap（PBO/CSCV 放后续版本） | — | DSR（试验数 = trials.csv 的总行数）、walk-forward 拼接曲线、bootstrap 下的 MDD 分布 | DSR > 0.9 为"强"，0.5～0.9 为"弱"，< 0.5 时须在提案中说明 |
 | 14 | E11 | 保留集（C1 之后） | 1 | 全部指标 | 见 research §4 的退化路径 |
 
 **预算**：正式试验总数（trials.csv 的行数）控制在 150 以内。超出时必须在研究日志中说明理由，并相应提高 DSR 的门槛。
@@ -163,7 +165,7 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 
 1. **每个参数都必须有经济学解释**，在运行之前写进研究日志。"回测出来最好"不能作为唯一理由。
 2. **看邻域，不看单点**：选的是一片高原，不是一个尖峰。邻域内主指标的均值必须 ≥ 选定值的 80%，否则视为不稳健，退回默认值或更简单的方案。
-3. **一次只改一个变量**。每个实验结束后，结论记入 `research/log.md`。格式如下：
+3. **一次只改一个变量**。每个实验结束后，结论记入 `doc/research/log.md`。格式如下：
 
    ```
    ## E3b momentum_skip（2026-xx-xx，commit abc123）
@@ -183,9 +185,10 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
    - **成本**：成本是否按双边、按实际换手扣除；最小下单额和取整是否生效。
    - **数据**：微秒时间戳是否被当成毫秒；有没有重复的日线；同名复用是否没有切段。
    - 排查记录写进研究日志。
-6. **试验计数**：每次运行的配置都追加到 `trials.csv`，包括失败的和被放弃的。DSR 按总试验数计算。
+6. **试验计数**：每次运行的配置都追加到 `doc/research/trials.csv`，包括失败的和被放弃的。DSR 按总试验数计算。
 7. **报告全部结果**：实验报告要列出整个网格的结果，不能只挑最好的。
 8. **简单优先**：两个方案的差异在噪声内（Sharpe 差 < 0.2，且两段方向不一致）时，选参数更少、规则更简单的那一个。
+9. **不受保留集行情的先验影响**：做参数决定时，只依据研究集数据和事先写好的理由。研究人员（包括 Claude）对 2025-07 之后行情的任何印象（例如某段时间 BTC 或山寨币涨跌如何），都不能作为选参或改规则的理由；如果研究日志里的理由引用了这类印象，该决定作废重来。
 
 ---
 
@@ -264,8 +267,8 @@ M0 ─┬─► M1 ─► M2 ─► M3 ─►[C1]─► M4 ─►[C2]─┐
 | **C0** | M0 结束 | Q0（策略结构）、Q1（目标）、Q4（客户端方案）、Q9（资产审核方式）、Q10（保留集规则） |
 | **C1** | M3 结束 | 参数提案 `proposal_v1.md`；是否运行保留集检验 |
 | **C2** | M4 结束 | 保留集结果 → 进入 demo / 退化为纯 BTC 趋势 / 回到研究 |
-| **C3** | M6 结束 | testnet 联调与故障演练结果 → 是否开始 demo 前向运行；Q3、Q5、Q6、Q8 |
-| **C4** | M7 结束 | 4 周 demo 结果 → 是否上 live（Q2、Q12），这一步由用户自行操作 |
+| **C3** | M6 结束 | testnet 联调与故障演练结果 → 是否开始 demo 前向运行；Q6 的服务器地区（Q3、Q5、Q8 已于 2026-11-01 决定） |
+| **C4** | M7 结束 | 4 周 demo 结果 → 是否上 live、正式资金规模（Q12；Q2 已决定使用专用子账户），这一步由用户自行操作 |
 | 随时 | 发现 spec 有矛盾或缺陷；出现 §4 第 5 条的异常结果；需要访问本文档没有列出的外部接口；任何涉及 live 环境的操作 | 停下来汇报，等待指示 |
 
 ---
