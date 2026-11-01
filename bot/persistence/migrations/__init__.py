@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
-from bot.persistence.migrations import v001_initial
+from bot.persistence.migrations import v001_initial, v002_external_balances
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,10 @@ class Migration:
     upgrade: Callable[[Connection], None]
 
 
-MIGRATIONS: tuple[Migration, ...] = (Migration(1, v001_initial.DESCRIPTION, v001_initial.upgrade),)
+MIGRATIONS: tuple[Migration, ...] = (
+    Migration(1, v001_initial.DESCRIPTION, v001_initial.upgrade),
+    Migration(2, v002_external_balances.DESCRIPTION, v002_external_balances.upgrade),
+)
 
 LATEST_VERSION = MIGRATIONS[-1].version
 

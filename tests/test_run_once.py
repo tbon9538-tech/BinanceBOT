@@ -38,10 +38,13 @@ def _series(seed: int, drift: float, vol: float) -> list[float]:
 
 def market_frames() -> dict[str, pd.DataFrame]:
     start = T - timedelta(days=N_DAYS - 1)
-    frames = {"BTCUSDT": raw_frame(start, N_DAYS, close=lambda i, s=_series(1, 0.003, 0.02): s[i], qv=lambda i: 5e9)}
+    btc = _series(1, 0.003, 0.02)
+    frames = {"BTCUSDT": raw_frame(start, N_DAYS, close=lambda i: btc[i], qv=lambda i: 5e9)}
     for k, a in enumerate(ALTS):
         s = _series(10 + k, 0.004 - 0.0005 * k, 0.04)
-        frames[f"{a}USDT"] = raw_frame(start, N_DAYS, close=lambda i, s=s: s[i], qv=lambda i, k=k: 1e8 * (k + 1))
+        frames[f"{a}USDT"] = raw_frame(
+            start, N_DAYS, close=lambda i, s=s: s[i], qv=lambda i, k=k: 1e8 * (k + 1)
+        )
     return frames
 
 
@@ -53,7 +56,13 @@ class FakeMarket:
     def get_exchange_info(self) -> Mapping[str, Any]:
         return {
             "symbols": [
-                {"symbol": s, "baseAsset": s[:-4], "quoteAsset": "USDT", "status": "TRADING", "isSpotTradingAllowed": True}
+                {
+                    "symbol": s,
+                    "baseAsset": s[:-4],
+                    "quoteAsset": "USDT",
+                    "status": "TRADING",
+                    "isSpotTradingAllowed": True,
+                }
                 for s in self.frames
             ]
         }
@@ -69,7 +78,14 @@ def make_account(frames: Mapping[str, pd.DataFrame], usdt: str = "1000") -> SimS
     last = {s: D(f["close"].iloc[-1]) for s, f in frames.items()}
     rules = {s: make_rules(s, s[:-4], step="0.00001", tick="0.0001") for s in frames}
     books = {s: (p * D("0.9995"), p * D("1.0005")) for s, p in last.items()}
-    return SimSpotAccount(rules=rules, balances={"USDT": D(usdt)}, books=books, avg_prices=last, prices=last, account_id="spot-main")
+    return SimSpotAccount(
+        rules=rules,
+        balances={"USDT": D(usdt)},
+        books=books,
+        avg_prices=last,
+        prices=last,
+        account_id="spot-main",
+    )
 
 
 def make_cfg() -> AppConfig:
@@ -206,3 +222,23 @@ def test_daemon_runs_daily_and_stops_on_kill(env) -> None:  # type: ignore[no-un
     deps.kill_file.write_text("x")
     assert run_daemon(DailyRunner(deps), "00:10", now=clock.now, sleep=clock.sleep) == 0
     assert deps.repo.get_system_state("mom1").state == "KILLED"  # type: ignore[union-attr]
+
+
+def test_preexisting_balances_are_external(env) -> None:  # type: ignore[no-untyped-def]
+    """账户里原有的 BTC / A1 不被当成策略持仓（D-062；testnet 联调发现的问题）。"""
+    deps, acct, clock = env
+    acct.adjust_balance("BTC", D("1"))
+    acct.adjust_balance("A1", D("50"))
+    acct.adjust_balance("XYZ", D("7"))
+    r = DailyRunner(deps).run_once()
+    assert r.status == "DONE"
+    bought = sum(o.quantity for o in acct.placed if o.symbol == "BTCUSDT" and o.side is Side.BUY)
+    pos = deps.repo.get_position("spot-main", "mom1", "BTC")
+    assert pos is not None and pos.qty <= bought  # 只算策略买入的部分（扣手续费）
+    assert not [e for e in deps.repo.list_events("mom1", type_="RECONCILE_DIFF") if e.level != "INFO"]
+    post = deps.repo.latest_nav_snapshot("mom1", "spot-main", kind="POST_TRADE")
+    assert post is not None and post.nav_usdt < D("1100")  # 1000 USDT 起步，不含原有 1 BTC
+    assert deps.repo.get_external_balances("spot-main", "mom1")["BTC"] == D("1")
+    clock.t += timedelta(days=1)
+    DailyRunner(deps).run_once()  # 次日：基线保持，没有"无法解释的余额变化"
+    assert not deps.repo.list_events("mom1", type_="UNEXPLAINED_BALANCE_CHANGE")

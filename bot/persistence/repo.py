@@ -29,6 +29,7 @@ from bot.persistence.models import (
     CapitalFlowRow,
     DailyTargetRow,
     EventRow,
+    ExternalBalanceRow,
     FillRow,
     IdSequenceRow,
     NavSnapshotRow,
@@ -434,6 +435,33 @@ class StateRepo:
         for f in self.list_fills(strategy_id, account_id, recorded_after=recorded_after):
             total += fill_asset_delta(f, asset)
         return total
+
+    # ---- 外部基线（D-062）----
+
+    def get_external_balances(self, account_id: str, strategy_id: str) -> dict[str, Decimal]:
+        with self._session() as s:
+            q = select(ExternalBalanceRow).where(
+                ExternalBalanceRow.account_id == account_id, ExternalBalanceRow.strategy_id == strategy_id
+            )
+            return {row.asset: row.qty for row in s.scalars(q)}
+
+    def set_external_balance(
+        self, account_id: str, strategy_id: str, asset: str, qty: Decimal, *, now: datetime | None = None
+    ) -> None:
+        with self._session() as s, s.begin():
+            row = s.get(ExternalBalanceRow, (account_id, strategy_id, asset))
+            if row is None:
+                s.add(
+                    ExternalBalanceRow(
+                        account_id=account_id,
+                        strategy_id=strategy_id,
+                        asset=asset,
+                        qty=qty,
+                        recorded_at=self._t(now),
+                    )
+                )
+            elif row.qty != qty:
+                row.qty, row.recorded_at = qty, self._t(now)
 
     # ---- 持仓 ----
 

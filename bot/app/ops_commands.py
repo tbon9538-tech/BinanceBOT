@@ -131,7 +131,7 @@ def cmd_status(cfg: AppConfig, args: argparse.Namespace) -> int:
         print(
             f"最近快照（{snap.kind} {snap.time:%Y-%m-%d %H:%M}）：净值 {snap.nav_usdt:.2f}，单位净值 {snap.nav_per_unit:.4f}"
         )
-    bal = deps.account.get_balances()
+    bal = DailyRunner(deps)._view().get_balances()
     managed = managed_assets(repo, cfg)
     print("受管资产：" + ("，".join(f"{a} {bal[a].total}" for a in sorted(managed) if a in bal) or "无"))
     print(f"USDT：{bal[QUOTE].total if QUOTE in bal else 0}")
@@ -192,7 +192,8 @@ def cmd_resume(cfg: AppConfig, args: argparse.Namespace) -> int:
 def cmd_capital(cfg: AppConfig, args: argparse.Namespace) -> int:
     """出入金登记（按当时的单位净值申购 / 赎回份额）与余额变化确认（spec §5.2）。"""
     deps = build_deps(cfg)
-    repo, acct = deps.repo, deps.account
+    repo = deps.repo
+    acct = DailyRunner(deps)._view()
     rules = acct.get_all_rules()
     balances = acct.get_balances()
     managed = managed_assets(repo, cfg)

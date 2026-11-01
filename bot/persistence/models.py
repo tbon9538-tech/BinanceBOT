@@ -252,6 +252,17 @@ class SystemStateRow(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class ExternalBalanceRow(Base):
+    """外部基线：策略接手之前账户里已有的数量（D-062）。"""
+
+    __tablename__ = "external_balances"
+    account_id: Mapped[str] = mapped_column(String, primary_key=True)
+    strategy_id: Mapped[str] = mapped_column(String, primary_key=True)
+    asset: Mapped[str] = mapped_column(String, primary_key=True)
+    qty: Mapped[Decimal] = mapped_column(DecimalText)
+    recorded_at: Mapped[dt.datetime] = mapped_column(UtcDateTime)
+
+
 class AssetReviewRow(Base):
     __tablename__ = "asset_review"
     asset: Mapped[str] = mapped_column(String, primary_key=True)

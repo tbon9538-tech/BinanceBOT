@@ -23,6 +23,7 @@ from typing import Any
 import pandas as pd
 from filelock import FileLock, Timeout
 
+from bot.app.account_view import StrategyAccountView, refresh_baselines
 from bot.config import AppConfig, AssetsConfig, TrendSleeveConfig
 from bot.data.store import MarketStore
 from bot.data.sync import SyncReport, sync_rest_tail
@@ -113,6 +114,16 @@ class DailyRunner:
     def __init__(self, deps: RunDeps) -> None:
         self.d = deps
         self.cfg = deps.cfg
+        self.acct: SpotAccount = deps.account
+
+    def _view(self) -> SpotAccount:
+        """刷新外部基线，返回策略视角的账户（D-062）。"""
+        managed = managed_assets(self.d.repo, self.cfg)
+        base = refresh_baselines(
+            self.d.repo, self.cfg.account_id, self.cfg.strategy_id, self.d.account.get_balances(), managed,
+            now=self.d.now(),
+        )  # fmt: skip
+        return StrategyAccountView(self.d.account, base)
 
     # ---------------- 公共入口 ----------------
 
@@ -147,7 +158,8 @@ class DailyRunner:
         repo.start_run(
             run_id, strategy_id=self.cfg.strategy_id, account_id=self.cfg.account_id, run_date=run_date
         )
-        rules = self.d.account.get_all_rules()
+        self.acct = self._view()
+        rules = self.acct.get_all_rules()
         managed = managed_assets(repo, self.cfg)
         ex = self._executor(run_id, run_date, abort=lambda: False)
         ex.cancel_strategy_open_orders(sorted(f"{a}{QUOTE}" for a in managed if f"{a}{QUOTE}" in rules))
@@ -155,9 +167,7 @@ class DailyRunner:
         repo.set_system_state(self.cfg.strategy_id, SystemState.KILLED.value, reason=reason)
         repo.set_run_status(run_id, "DONE")
         self._event("KILLED", "CRITICAL", {"reason": reason}, run_id)
-        left = {
-            a: str(b.total) for a, b in self.d.account.get_balances().items() if a in managed and b.total > 0
-        }
+        left = {a: str(b.total) for a, b in self.acct.get_balances().items() if a in managed and b.total > 0}
         self.d.notifier.send(
             f"[{self.cfg.strategy_id}] 已紧急停止（{reason}）。剩余受管资产：{left or '无'}", "CRITICAL"
         )
@@ -190,6 +200,7 @@ class DailyRunner:
             fn = getattr(acct, hook, None)
             if callable(fn):
                 fn()
+        acct = self.acct = self._view()
         rules = acct.get_all_rules()
         balances = acct.get_balances()
 
@@ -303,7 +314,7 @@ class DailyRunner:
 
     def _executor(self, run_id: str, run_date: date, *, abort: Callable[[], bool]) -> SpotExecutor:
         return SpotExecutor(
-            self.d.account, self.d.repo, self.cfg.execution, strategy_id=self.cfg.strategy_id,
+            self.acct, self.d.repo, self.cfg.execution, strategy_id=self.cfg.strategy_id,
             account_id=self.cfg.account_id, run_id=run_id, run_date=run_date, should_abort=abort,
             sleep=self.d.sleep, clock=self.d.now,
         )  # fmt: skip
@@ -489,7 +500,7 @@ class DailyRunner:
         force: bool,
         dry: bool,
     ) -> tuple[ExecutionReport | None, ExecutionReport | None, list[str]]:
-        cfg, acct = self.cfg, self.d.account
+        cfg, acct = self.cfg, self.acct
         msgs: list[str] = []
         held = {f"{a}{QUOTE}" for a in managed}
         books, avg = _books(acct, set(weights) | held, rules)
@@ -527,9 +538,9 @@ class DailyRunner:
     def _liquidate(
         self, ex: SpotExecutor, rules: Mapping[str, SymbolRules], managed: set[str]
     ) -> ExecutionReport | None:
-        balances = self.d.account.get_balances()
+        balances = self.acct.get_balances()
         held = {f"{a}{QUOTE}" for a in managed}
-        books, avg = _books(self.d.account, held, rules)
+        books, avg = _books(self.acct, held, rules)
         plan = plan_liquidation(
             balances, rules, books, avg, self.cfg.rebalance, self.cfg.execution, managed_assets=managed
         )
