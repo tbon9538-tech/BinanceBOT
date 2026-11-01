@@ -154,7 +154,7 @@ def run_experiment(
         out_dir = reports_dir / exp_id / _safe(v.name)
         summ = write_report(
             out_dir, f"{exp_id} {v.name}", res, bench, ctx.panel.close[cfg.regime.symbol],
-            usdt_yield=cfg.backtest.usdt_yield_annual,
+            usdt_yield=cfg.backtest.usdt_yield_annual, segment_split=cfg.research.segment_split,
         )  # fmt: skip
         rebal = rebalance_stats(res)
         sat = rebal[rebal["sleeve"] == "satellite"]
@@ -207,16 +207,17 @@ def _write_experiment_summary(
         f"- 假设：{spec.get('hypothesis', '')}",
         f"- 通过标准：{spec.get('criteria', 'strategy_research.md §0.3')}",
         "",
-        "| 变体 | 年化 | 夏普 | 最大回撤 | Calmar | 前半段夏普 | 后半段夏普 | 平均仓位 | 年换手 | 卫星月均交易 | 最差7日 | bootstrap回撤P80 | "
-        + " | ".join(years)
-        + " |",
-        "|---" * (12 + len(years)) + "|",
+        "| 变体 | 年化 | 夏普 | 最大回撤 | Calmar | 前半段夏普 | 后半段夏普 | 段A夏普 | 段B夏普 | 段B回撤 | 平均仓位 | 年换手 | "
+        "卫星月均交易 | 最差7日 | bootstrap回撤P80 | " + " | ".join(years) + " |",
+        "|---" * (15 + len(years)) + "|",
     ]
     for r in table.itertuples():
         y = r.yearly
         lines.append(
             f"| {r.variant} | {r.cagr:.1%} | {r.sharpe:.2f} | {r.mdd:.1%} | {r.calmar:.2f} | "
             f"{getattr(r, 'h1_sharpe', float('nan')):.2f} | {getattr(r, 'h2_sharpe', float('nan')):.2f} | "
+            f"{getattr(r, 'seg_a_sharpe', float('nan')):.2f} | {getattr(r, 'seg_b_sharpe', float('nan')):.2f} | "
+            f"{getattr(r, 'seg_b_mdd', float('nan')):.1%} | "
             f"{r.avg_gross:.2f} | {r.turnover_per_year:.1f} | {r.sat_trades_per_month:.1f} | "
             f"{r.worst_7d:.1%} | {getattr(r, 'boot_mdd_p80', float('nan')):.1%} | "
             + " | ".join(f"{y.get(k, float('nan')):.1%}" for k in years)

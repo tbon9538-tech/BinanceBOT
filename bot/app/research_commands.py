@@ -78,6 +78,7 @@ def cmd_backtest(cfg: AppConfig, args: argparse.Namespace) -> int:
         bench,
         ctx.panel.close[run_cfg.regime.symbol],
         usdt_yield=run_cfg.backtest.usdt_yield_annual,
+        segment_split=run_cfg.research.segment_split,
     )
     _print_summary(name, summ)
     print(f"报告：{out}")

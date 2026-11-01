@@ -50,9 +50,14 @@ def regime_intervals(result: BacktestResult, btc_close: pd.Series) -> pd.DataFra
 
 
 def build_summary(
-    result: BacktestResult, benchmarks: dict[str, pd.Series], *, usdt_yield: float = 0.0
+    result: BacktestResult,
+    benchmarks: dict[str, pd.Series],
+    *,
+    usdt_yield: float = 0.0,
+    segment_split: date | None = None,
 ) -> dict[str, Any]:
-    """usdt_yield：年化 USDT 理财收益假设，用于"扣除 USDT 理财收益"的参考夏普（spec §1.2）。"""
+    """usdt_yield：年化 USDT 理财收益假设，用于"扣除 USDT 理财收益"的参考夏普（spec §1.2）。
+    segment_split：把同一条净值曲线在这一天切开，分别给出段 A / 段 B 的指标（D-085）。"""
     nav = result.nav
     d = result.daily
     summ: dict[str, Any] = stats.summarize(nav)
@@ -80,6 +85,13 @@ def build_summary(
                 s["cagr"],
                 s["mdd"],
             )
+    if segment_split is not None:
+        cut = pd.Timestamp(segment_split)
+        for name, part in (("seg_a", nav.loc[nav.index < cut]), ("seg_b", nav.loc[nav.index >= cut])):
+            if len(part) > 30:
+                s = stats.summarize(part)
+                for k in ("sharpe", "cagr", "mdd", "calmar"):
+                    summ[f"{name}_{k}"] = s[k]
     summ["benchmarks"] = {}
     for name, b in benchmarks.items():
         bs = stats.summarize(b)
@@ -106,6 +118,12 @@ def summary_markdown(name: str, summ: dict[str, Any], rebal: pd.DataFrame, inter
         "|---|---|",
     ]
     lines += [f"| {k} | {_fmt(summ.get(k))} |" for k in keys]
+    for seg, label in (("seg_a", "段 A"), ("seg_b", "段 B")):
+        if f"{seg}_sharpe" in summ:
+            lines.append(
+                f"| {label}（夏普 / 年化 / 回撤 / Calmar） | {summ[f'{seg}_sharpe']:.2f} / {summ[f'{seg}_cagr']:.1%} / "
+                f"{summ[f'{seg}_mdd']:.1%} / {summ[f'{seg}_calmar']:.2f} |"
+            )
     for h in ("h1", "h2"):
         if f"{h}_sharpe" in summ:
             lines.append(
@@ -179,9 +197,10 @@ def write_report(
     btc_close: pd.Series,
     *,
     usdt_yield: float = 0.0,
+    segment_split: date | None = None,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    summ = build_summary(result, benchmarks, usdt_yield=usdt_yield)
+    summ = build_summary(result, benchmarks, usdt_yield=usdt_yield, segment_split=segment_split)
     rebal = rebalance_stats(result)
     intervals = regime_intervals(result, btc_close.loc[result.nav.index])
     (out_dir / "summary.json").write_text(

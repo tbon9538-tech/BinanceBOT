@@ -156,6 +156,8 @@ class XsMomentumSleeveConfig(_SleeveBase):
     ctrend_signals: Literal["price_volume", "price"] = "price_volume"
     ctrend_window_weeks: int = Field(52, ge=2)  # 平均最近几个锚点的横截面回归系数
     ctrend_horizon_days: int = Field(7, ge=1)  # 锚点间隔与预测期
+    # 山寨季过滤（研究 R8）：标的池等权的 N 日收益跑赢 BTC 时才持有卫星；None 表示不过滤
+    alt_season_lookback: int | None = Field(None, ge=2)
     max_lookback_return: float | None = Field(1.5, gt=0)
     coin_sma_period: int = Field(50, ge=2)
     top_n: int = Field(5, ge=1)
@@ -260,6 +262,7 @@ class BacktestConfig(_Model):
 
 class ResearchConfig(_Model):
     holdout_start: date = date(2026, 11, 1)  # 2026-11-02 起（D-085）；第一段保留集 2025-07-01 已用过
+    segment_split: date = date(2025, 7, 1)  # 报告中段 A / 段 B 的分界（D-085：新研究须两段都不劣于当前配置）
 
 
 class NotifyConfig(_Model):

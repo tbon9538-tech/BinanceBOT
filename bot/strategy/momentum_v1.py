@@ -17,7 +17,7 @@ from bot.strategy.ctrend import CtrendModel
 from bot.strategy.indicators import MarketPanel
 from bot.strategy.portfolio import combine_sleeves
 from bot.strategy.regime import regime_series, regime_with_exposure
-from bot.strategy.sleeves import core_target, rank_universe, satellite_target
+from bot.strategy.sleeves import alt_season, core_target, rank_universe, satellite_target
 from bot.strategy.smoothing import Overrides, smoothed_target
 
 
@@ -121,7 +121,11 @@ class MomentumV1:
             else:
                 assert isinstance(scfg, XsMomentumSleeveConfig)
                 uni = self.universe(d, tuple(scfg.exclude_symbols)) if on else []
-                out = satellite_target(self.panel, scfg, d, on, uni, blocked, self._ctrend.get(sleeve))
+                n = scfg.alt_season_lookback
+                if on and n is not None and not alt_season(self.panel, uni, self.cfg.regime.symbol, d, n):
+                    out = {}  # R8：不是山寨季时卫星不持仓，这一半资金留作 USDT
+                else:
+                    out = satellite_target(self.panel, scfg, d, on, uni, blocked, self._ctrend.get(sleeve))
             e = self.exposure(d)
             if e < 1.0:  # 集成模式：按处于 Risk-On 的均线比例缩放（sma / tsmom 模式下 e 只取 0 或 1）
                 out = {k: w * e for k, w in out.items()}

@@ -106,6 +106,25 @@ def satellite_scores(
     return score.astype("float64")
 
 
+ALT_SEASON_MIN_COINS = 5  # R8 预注册：参与计算的币少于这个数时不算山寨季
+
+
+def alt_season(panel: MarketPanel, universe: list[str], btc_col: str, t: pd.Timestamp, lookback: int) -> bool:
+    """研究 R8：卫星标的池中 [t − N, t] 收盘完整的币，等权 N 日收益是否跑赢 BTC 的 N 日收益。"""
+    if btc_col not in panel.columns:
+        return False
+    cols = [c for c in universe if c != btc_col]
+    if not cols:
+        return False
+    complete = panel.complete(lookback + 1).loc[t, cols]
+    cols = [c for c in cols if bool(complete[c])]
+    if len(cols) < ALT_SEASON_MIN_COINS:
+        return False
+    mom = panel.mom(lookback, 0).loc[t]
+    basket, btc = float(mom[cols].mean()), float(mom[btc_col])
+    return bool(np.isfinite(basket) and np.isfinite(btc) and basket > btc)
+
+
 def satellite_target(
     panel: MarketPanel,
     cfg: XsMomentumSleeveConfig,
