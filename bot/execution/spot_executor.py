@@ -210,6 +210,7 @@ class SpotExecutor:
         clock: Callable[[], datetime] = utc_now,
         quote_asset: str = "USDT",
         blocked_symbols: Iterable[str] = (),
+        alert: Callable[[str, str, str], None] | None = None,
     ) -> None:
         self.account = account
         self.repo = repo
@@ -223,6 +224,7 @@ class SpotExecutor:
         self._sleep = sleep
         self._now = MonotonicClock(clock)
         self.blocked_symbols: set[str] = set(blocked_symbols)
+        self._alert = alert  # (类型, 级别, 内容)：WARN 及以上的事件同时推送通知（spec §12）
 
     # ---- 事件 ----
 
@@ -243,6 +245,8 @@ class SpotExecutor:
             now=self._now(),
         )
         sink.append(ExecEvent(type_, level, symbol, message, data))
+        if self._alert is not None and level != INFO:
+            self._alert(type_, level, f"{symbol} {message}" if symbol else message)
 
     def _block(self, symbol: str, why: str) -> None:
         if symbol not in self.blocked_symbols:

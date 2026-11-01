@@ -115,6 +115,7 @@ Docker Desktop 需要设置为开机自动启动（Settings → General → Star
 - **Telegram**：只发通知（日报、大盘切换、告警），**不接收任何命令**（v1 决定，见 doc/DECISIONS.md D-006）。在 `.env` 中配置 token 与 chat_id；未配置时只写日志。
 - **外部心跳**：在 [healthchecks.io](https://healthchecks.io) 建一个周期 1 天、宽限 2 小时的检查，把 ping 地址（`https://hc-ping.com/<uuid>`）写入 `.env` 的 `HEARTBEAT_URL`（地址相当于密钥，不放在 config.yaml，D-071）。每次运行成功后 ping 一次；程序没有运行时由它告警。`status` 会显示 Telegram 与心跳是否已配置。
 - **管理界面**（D-075）：`docker compose up -d --build` 会同时启动机器人和界面；只要界面时用 `docker compose up -d --build dashboard`。浏览器打开 http://127.0.0.1:8080 ，用 `.env` 的 `DASHBOARD_USERNAME`（默认 admin）和 `DASHBOARD_PASSWORD` 登录（密码 demo / testnet 至少 8 位，live 至少 12 位，D-078）。能查看净值曲线、大盘、实时持仓、目标权重、运行记录、事件、成交，并执行暂停、恢复、立即运行一次、确认余额、紧急停止（输入 KILL）。端口只开放给本机；手机或其他电脑通过 Tailscale 访问，**不要把 8080 端口开放到公网**（界面能清仓）。云服务器部署见 [doc/deploy_cloud.md](doc/deploy_cloud.md)。
+- **告警**：spec §12 列出的 WARN / CRITICAL 告警（订单状态未知、订单未完成、对账差额、无法解释的余额变化、单日异常、持仓币停止交易、数据未就绪、熔断、kill、运行失败、大盘重放不一致等）都会推送到 Telegram；最近一次成功运行距今超过 30 小时会发 `MISSED_RUN`（运行开始时与常驻模式每小时检查）。程序完全停止时由外部心跳负责告警。
 - **日志**：`logs/bot.log`，按天滚动、保留 90 天，密钥自动打码。
 - **状态库备份**：每次运行正常结束后，自动把 `data/state-<env>.db` 备份到 `data/backup/state-<env>-<UTC 时间>.db`，每个环境保留最近 30 份（`config.yaml` 的 `backup`，D-072）。备份失败只发 WARN，不影响运行。`status` 会显示备份份数。
   恢复步骤：`docker compose stop bot` → 把选定的备份复制为 `data/state-<env>.db`，并删除同目录下残留的 `state-<env>.db-wal`、`state-<env>.db-shm` → `docker compose start bot` → 用 `status` 核对。备份与原库在同一块磁盘上，防误操作和文件损坏，不防磁盘损坏。

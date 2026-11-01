@@ -27,6 +27,7 @@ from filelock import FileLock, Timeout
 
 from bot.app.account_view import StrategyAccountView, refresh_baselines
 from bot.config import AppConfig, AssetsConfig, TrendSleeveConfig
+from bot.data.quality import drop_invalid_bars, missing_days, price_jumps
 from bot.data.store import MarketStore
 from bot.data.sync import SyncReport, sync_rest_tail
 from bot.domain.types import Balance, Env, Side, SymbolRules, SystemState
@@ -197,6 +198,7 @@ class DailyRunner:
         cfg, repo, acct = self.cfg, self.d.repo, self.d.account
         msgs: list[str] = []
         repo.ensure_account(cfg.account_id, env=cfg.env.value)
+        self.check_missed_run()  # 在本次 run 写入 STARTED 之前检查（spec §12 MISSED_RUN）
         prior = repo.get_run(run_id)
         already_done = prior is not None and prior.status == "DONE"
         repo.start_run(run_id, strategy_id=cfg.strategy_id, account_id=cfg.account_id, run_date=run_date)
@@ -234,9 +236,13 @@ class DailyRunner:
         # 5) 行情
         t = run_date - timedelta(days=1)
         data_ok = self._update_market_data(t)
+        problem = f"{t} 的 BTC 日线仍不可用"
+        if data_ok and (gaps := self._regime_gaps(t)):  # spec §3.3 第 1 条
+            data_ok = False
+            problem = f"{cfg.regime.symbol} 最近 {cfg.regime.sma_period} 天缺少 {len(gaps)} 天的有效日线（最早 {gaps[0]}）"
         if not data_ok:
-            self._event("DATA_NOT_READY", "WARN", {"t": t.isoformat()}, run_id)
-            self.d.notifier.send(f"[{cfg.strategy_id}] {t} 的 BTC 日线仍不可用，本次不交易", "WARN")
+            self._event("DATA_NOT_READY", "WARN", {"t": t.isoformat(), "reason": problem}, run_id)
+            self.d.notifier.send(f"[{cfg.strategy_id}] {problem}，本次不交易", "WARN")
 
         # 6) 目标（纯函数）
         tb = None
@@ -277,6 +283,10 @@ class DailyRunner:
                 "CRITICAL" if ev in ("DATA_ANOMALY", "DRAWDOWN_HALT", "KILLED") else "WARN",
                 {"reasons": g.reasons},
                 run_id,
+                # 熔断、暂停、kill 在下面各自发送通知；这两类只禁止买入，在这里推送（spec §12）
+                notify="；".join(g.reasons)
+                if ev in ("UNEXPLAINED_BALANCE_CHANGE", "DAILY_ANOMALY")
+                else None,
             )
         msgs += g.reasons
         if g.action is Action.KILL:
@@ -321,7 +331,8 @@ class DailyRunner:
         )  # fmt: skip
         status = "DRY_RUN" if dry and trading else ("DONE" if (trading or already_done) else "SKIPPED")
         repo.set_run_status(run_id, "DONE" if status in ("DONE", "DRY_RUN") else "SKIPPED", signal_date=t)
-        self._daily_report(t, tb, post, units, peak, sells, buys, balances, managed, msgs)
+        day_ret = navu / prev.nav_per_unit - 1 if prev is not None and prev.nav_per_unit > 0 else None
+        self._daily_report(t, tb, post, units, peak, sells, buys, balances, managed, msgs, day_ret)
         if status == "DONE":
             heartbeat.ping(self.d.heartbeat_url, transport=self.d.heartbeat_transport)
         return RunResult(status, run_id, msgs, sells=sells, buys=buys)
@@ -345,7 +356,7 @@ class DailyRunner:
         return SpotExecutor(
             self.acct, self.d.repo, self.cfg.execution, strategy_id=self.cfg.strategy_id,
             account_id=self.cfg.account_id, run_id=run_id, run_date=run_date, should_abort=abort,
-            sleep=self.d.sleep, clock=self.d.now,
+            sleep=self.d.sleep, clock=self.d.now, alert=self._alert,
         )  # fmt: skip
 
     def _needed_symbols(self, tradable_live: set[str]) -> set[str]:
@@ -413,7 +424,10 @@ class DailyRunner:
         end_excl = (t + timedelta(days=1)).isoformat()
         frames = {}
         for sym in sorted(allowed | core | {cfg.regime.symbol}):
-            df = store.read_symbol(sym, start, end_excl)
+            df, bad = drop_invalid_bars(store.read_symbol(sym, start, end_excl))  # spec §3.3 第 2 条
+            if bad:
+                log.warning("%s 有 %d 根日线不满足 0 < low ≤ min(open, close) ≤ max(open, close) ≤ high，"
+                            "已剔除（例如 %s）；窗口内出现缺口时当天不参与计算", sym, len(bad), bad[-1])  # fmt: skip
             if not df.empty:
                 frames[sym] = df
         panel = MarketPanel.from_frames(frames, gap_days=cfg.universe.segment_gap_days)
@@ -423,12 +437,19 @@ class DailyRunner:
         frozen = {
             f"{a}{QUOTE}" for a in managed if (r := rules.get(f"{a}{QUOTE}")) is not None and not r.is_trading
         }
+        for sym, move in sorted(
+            price_jumps(panel.close, ts, cfg.data.price_jump_warn).items()
+        ):  # spec §3.3 第 3 条
+            log.warning("%s 在 %s 的收盘价单日变化 %.0f%%，超过 %.0f%%（只记录，不中止）", sym, t, move * 100,
+                        cfg.data.price_jump_warn * 100)  # fmt: skip
         for sym in sorted(frozen):
-            self._event("HELD_SYMBOL_NOT_TRADING", "CRITICAL", {"symbol": sym}, run_id)
+            self._event("HELD_SYMBOL_NOT_TRADING", "CRITICAL", {"symbol": sym}, run_id,
+                        notify=f"持仓 {sym} 在执行环境中不可交易，已冻结：目标权重为 0，按最后价格计入净值")  # fmt: skip
         tradable = {s for s, r in rules.items() if r.is_trading}
         strat = MomentumV1(cfg, panel, asset_ok=lambda c: column_symbol(c) in allowed)
         tb = strat.target(ts, Overrides(always_excluded=frozenset(force_exit | frozen)))
         weights = {column_symbol(c): w for c, w in tb.weights.items() if column_symbol(c) in tradable}
+        self._check_regime_replay(strat.regime, run_id)
         reg = {str(k): v for k, v in strat.regime.loc[ts].to_dict().items()}
         self.d.repo.upsert_regime_state(
             cfg.strategy_id, t, symbol=cfg.regime.symbol, close=_d(float(reg["close"])),
@@ -605,7 +626,16 @@ class DailyRunner:
             return None
         return ex.execute(plan.sells, max_attempts=KILL_MAX_ATTEMPTS, balances=balances)
 
-    def _event(self, type_: str, level: str, payload: Mapping[str, Any], run_id: str | None) -> None:
+    def _event(
+        self,
+        type_: str,
+        level: str,
+        payload: Mapping[str, Any],
+        run_id: str | None,
+        *,
+        notify: str | None = None,
+    ) -> None:
+        """写入事件；notify 不为空时同时按事件级别推送这段文字（spec §12）。"""
         self.d.repo.append_event(
             type_,
             level,
@@ -614,19 +644,84 @@ class DailyRunner:
             account_id=self.cfg.account_id,
             run_id=run_id,
         )
+        if notify:
+            self._alert(type_, level, notify)
+
+    def _alert(self, type_: str, level: str, text: str) -> None:
+        """WARN / CRITICAL 告警的统一出口（执行器的事件也经过这里）。"""
+        self.d.notifier.send(f"[{self.cfg.strategy_id}] {type_}：{text}", level)
+
+    def check_missed_run(self) -> bool:
+        """spec §12 MISSED_RUN：最近一次 DONE 距今超过 notify.missed_run_hours 时告警。
+
+        同一段空档只告警一次（已有晚于那次 DONE 的 MISSED_RUN 事件时不再重复）。返回是否发出了告警。
+        """
+        sid = self.cfg.strategy_id
+        last = self.d.repo.last_run(sid, status="DONE")
+        if last is None:
+            return False
+        done_at = last.finished_at or last.started_at
+        hours = (self.d.now() - done_at).total_seconds() / 3600
+        if hours <= self.cfg.notify.missed_run_hours:
+            return False
+        prior = self.d.repo.list_events(sid, type_="MISSED_RUN")
+        if prior and prior[-1].time > done_at:
+            return False
+        self._event(
+            "MISSED_RUN", "WARN", {"last_done": last.run_id, "hours": round(hours, 1)}, None,
+            notify=f"最近一次成功运行是 {last.run_id}，已经 {hours:.0f} 小时没有成功运行",
+        )  # fmt: skip
+        return True
+
+    def _regime_gaps(self, t: date) -> list[date]:
+        """大盘标的在 [t − sma_period + 1, t] 内缺少的（有效）日线（spec §3.3 第 1 条）。"""
+        n = self.cfg.regime.sma_period
+        start = (t - timedelta(days=n - 1)).isoformat()
+        df, _ = drop_invalid_bars(
+            self.d.store.read_symbol(self.cfg.regime.symbol, start, (t + timedelta(days=1)).isoformat())
+        )
+        return missing_days(df, t, n)
+
+    def _check_regime_replay(self, replay: pd.DataFrame, run_id: str) -> None:
+        """重放结果与状态库最近一条大盘状态不一致时，以重放为准并告警（spec §4.2 REGIME_REPLAY_MISMATCH）。"""
+        rows = self.d.repo.list_regime_states(self.cfg.strategy_id)
+        if not rows:
+            return
+        last = rows[-1]
+        d = pd.Timestamp(last.date)
+        if d not in replay.index or str(replay.at[d, "state"]) == last.state:
+            return
+        replayed = str(replay.at[d, "state"])
+        self._event(
+            "REGIME_REPLAY_MISMATCH", "WARN", {"date": last.date.isoformat(), "stored": last.state, "replay": replayed},
+            run_id, notify=f"{last.date} 的大盘状态：状态库 {last.state}，重放 {replayed}；以重放结果为准",
+        )  # fmt: skip
 
     def _daily_report(
         self, t: date, tb: Any, nav: ledger.NavBreakdown, units: Decimal, peak: Decimal,
         sells: ExecutionReport | None, buys: ExecutionReport | None, balances: Mapping[str, Balance],
-        managed: set[str], msgs: list[str],
+        managed: set[str], msgs: list[str], day_ret: Decimal | None = None,
     ) -> None:  # fmt: skip
+        """DAILY_REPORT（spec §12）：NAVu、NAV、当日收益、回撤、Regime、各袖子与总体仓位、持仓、成交与成本、灰尘、非受管资产。"""
         if not self.cfg.notify.daily_report:
             return
         navu = nav.nav / units if units > 0 else Decimal(0)
         dd = navu / peak - 1 if peak > 0 else Decimal(0)
+        core_assets = {
+            s.removesuffix(QUOTE)
+            for sl in self.cfg.enabled_sleeves().values()
+            if isinstance(sl, TrendSleeveConfig)
+            for s in sl.symbols
+        }
+        core_val = sum((v for a, v in nav.positions.items() if a in core_assets), Decimal(0))
+        sat_val = sum((v for a, v in nav.positions.items() if a not in core_assets), Decimal(0))
+        share = (lambda v: v / nav.nav) if nav.nav > 0 else (lambda v: Decimal(0))
         lines = [
             f"[{self.cfg.strategy_id} · {self.cfg.env.value}] 日报 {t}",
-            f"单位净值 {navu:.4f}，净值 {nav.nav:.2f} USDT，回撤 {dd:.1%}，仓位 {nav.gross:.0%}",
+            f"单位净值 {navu:.4f}，净值 {nav.nav:.2f} USDT，"
+            + (f"当日 {day_ret:+.2%}，" if day_ret is not None else "")
+            + f"回撤 {dd:.1%}",
+            f"仓位 {nav.gross:.0%}（核心 {share(core_val):.0%}，卫星 {share(sat_val):.0%}）",
             f"大盘：{tb.regime.value if tb else '未知'}"
             + (f"（集成仓位乘数 {tb.exposure:.2f}）" if tb and self.cfg.regime.mode == "ensemble" else ""),
         ]
@@ -635,8 +730,22 @@ class DailyRunner:
                 "持仓："
                 + "，".join(f"{a} {v:.1f}" for a, v in sorted(nav.positions.items(), key=lambda x: -x[1]))
             )
-        n_fills = sum(len(o.fills) for r in (sells, buys) if r for o in r.outcomes)
-        lines.append(f"成交 {n_fills} 笔")
+        fills = [f for r in (sells, buys) if r for o in r.outcomes for f in o.fills]
+        cost = Decimal(0)
+        for f in fills:
+            if f.commission_asset == QUOTE:
+                cost += f.commission
+            elif f.commission_asset == f.symbol.removesuffix(QUOTE):
+                cost += f.commission * f.price
+        traded = sum((f.quote_qty for f in fills), Decimal(0))
+        lines.append(f"成交 {len(fills)} 笔，成交额 {traded:.2f} USDT，手续费约 {cost:.4f} USDT")
+        dust = sorted(
+            p.asset
+            for p in self.d.repo.list_positions(self.cfg.account_id, self.cfg.strategy_id, managed_only=True)
+            if p.dust and p.qty > 0
+        )
+        if dust:
+            lines.append("灰尘：" + "，".join(dust[:15]))
         unmanaged = sorted(a for a, b in balances.items() if a not in managed and a != QUOTE and b.total > 0)
         if unmanaged:
             lines.append("非受管资产：" + "，".join(unmanaged[:15]))

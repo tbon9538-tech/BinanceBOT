@@ -20,6 +20,7 @@ from bot.app.run_once import DailyRunner
 log = logging.getLogger(__name__)
 
 KILL_CHECK_SEC = 60.0
+MISSED_RUN_CHECK_SEC = 3600.0  # spec §12：常驻模式下每小时检查一次漏跑
 ALIVE_NAME = "daemon.alive"
 
 
@@ -54,11 +55,21 @@ def run_daemon(
     """返回退出码。KILL 后退出；max_cycles 只用于测试。"""
     cycles = 0
     alive = alive_path(runner.d.lock_file)
+    last_missed_check: datetime | None = None
     log.info("常驻模式启动：每天 %s UTC 运行", run_time_utc)
     while max_cycles is None or cycles < max_cycles:
         target = next_run_at(now(), run_time_utc)
         while now() < target:
             _mark_alive(alive, now(), "waiting", target)
+            if (
+                last_missed_check is None
+                or (now() - last_missed_check).total_seconds() >= MISSED_RUN_CHECK_SEC
+            ):
+                last_missed_check = now()
+                try:
+                    runner.check_missed_run()
+                except Exception:  # 检查失败不能影响常驻进程
+                    log.exception("漏跑检查失败")
             if runner.d.kill_file.exists():
                 lock = FileLock(str(runner.d.lock_file))
                 try:

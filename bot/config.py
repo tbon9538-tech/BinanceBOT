@@ -76,6 +76,7 @@ class _Model(BaseModel):
 class DataConfig(_Model):
     market_data_rest: str = "https://data-api.binance.vision"
     history_days: int = Field(800, ge=200)
+    price_jump_warn: float = Field(0.6, gt=0)  # spec §3.3 第 3 条：单日收盘变化超过它记 WARN
 
     @field_validator("market_data_rest")
     @classmethod
@@ -260,6 +261,7 @@ class NotifyConfig(_Model):
     telegram_enabled: bool = True  # 只发通知，不接收命令（D-006）
     heartbeat_enabled: bool = True  # 地址放在 .env 的 HEARTBEAT_URL（D-071）
     daily_report: bool = True
+    missed_run_hours: float = Field(30, gt=0)  # spec §12 MISSED_RUN：最近一次 DONE 距今超过它时告警
 
     @model_validator(mode="before")
     @classmethod

@@ -10,6 +10,7 @@ max_capital_usdt: 500         # Q12：先用 ≤ 500 USDT 验证系统
 data:
   market_data_rest: https://data-api.binance.vision
   history_days: 800
+  price_jump_warn: 0.6        # spec §3.3：标的池中单日收盘变化超过 60% 记 WARN，不中止
 
 universe:                     # 只用于卫星袖子
   universe_size: 30           # E1 已定（保留默认）
@@ -101,6 +102,7 @@ notify:
   telegram_enabled: true      # 只发通知，不接收命令（Q5 选 C）；没有配置 token 时自动降级为只写日志
   heartbeat_enabled: true     # 每次运行成功后 ping；地址写在 .env 的 HEARTBEAT_URL（D-071，公开仓库不能提交）；没写则不发
   daily_report: true
+  missed_run_hours: 30        # spec §12：最近一次成功运行距今超过 30 小时告警（运行开始时与常驻模式每小时检查）
 
 backup:                       # A3：每次运行正常结束后，用 SQLite 在线备份复制 data/state-<env>.db
   enabled: true

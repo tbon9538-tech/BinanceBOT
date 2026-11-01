@@ -7,7 +7,7 @@
 
 ## 1. 一句话现状
 
-币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（371 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。demo 前向观察 2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机（macOS），原电脑的容器已删除。**2026-11-01 17:06 UTC 起按用户要求暂停自动运行**（开发未完成），等用户说恢复再启动。
+币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（384 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。demo 前向观察 2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机（macOS），原电脑的容器已删除。**2026-11-01 17:06 UTC 起按用户要求暂停自动运行**（开发未完成），等用户说恢复再启动。
 
 | 项目 | 状态 |
 |---|---|
@@ -26,7 +26,7 @@
 3. `doc/ROADMAP.md`：**接下来怎么走**（阶段 A～D、研究线 R、功能线 F、阶段 2、用户决策点）。
 4. `doc/dev_plan.md`：开头的**进度表**、检查点 C0～C4、§4 防过拟合规则。
 5. `doc/open_questions.md`：顶部的**决策记录表**（Q0～Q14 都已决定，Q6 地区和 Q12 资金规模部分待定）。
-6. `doc/DECISIONS.md`（D-001～D-079）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
+6. `doc/DECISIONS.md`（D-001～D-082）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
 7. `doc/binance_momentum_bot_spec.md`：需求说明 v3；文末有"v3 修订"和"v3 实现阶段修订"两张表。
 8. `doc/research/log.md`：研究日志，包括全部预注册、结论，以及 E11 保留集和 R2 结果。
 9. `doc/testnet_log.md`、`doc/demo_log.md`：联调与前向观察记录。
@@ -170,6 +170,8 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 **已知小缺口**
 
 - ~~C5 的四项~~（`MAX_POSITION`、`forward` 测试、合并重复构造代码、日报显示 ensemble 乘数）：已完成（2026-11-02，D-073、D-074），见 CHANGELOG"未发布"。补测试时还修了 `forward` 周报取错同日快照的问题。
+- ~~对照 spec 审查发现的缺口~~（告警没有推送、`MISSED_RUN`、§3.3 数据质量检查、`REGIME_REPLAY_MISMATCH`、日报内容）：已修复（2026-11-02，D-081）。
+- 仍有几处影响小的偏差，记录在 D-082，需要时再修。
 
 ---
 
@@ -184,4 +186,4 @@ docker compose exec bot uv run --no-sync python -m bot status
 docker compose logs --tail 20 bot
 ```
 
-预期：371 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT，最后一行显示通知是否已配置和备份份数。
+预期：384 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT，最后一行显示通知是否已配置和备份份数。
