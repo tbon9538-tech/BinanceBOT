@@ -13,7 +13,7 @@
 |---|---|
 | 代码仓库 | `E:\projects1101\BinanceBOT`，分支 `master`（提交历史见 `git log`），**没有远端仓库、没有 tag** |
 | 运行中 | Docker 容器 `binancebot-bot-1`（`docker compose up -d`，`run --daemon`），每天 00:10 UTC 运行一次，`env: demo` |
-| 未提交改动 | `.dockerignore` 新增一行 `dist`（不是本会话写的，用户尚未表态；改动本身合理） |
+| 未提交改动 | 无（`.dockerignore` 排除 `dist` 已经用户同意并提交） |
 | 研究 | E0～E11 完成；保留集**已运行过一次，不得再运行**；R2（多周期均线集成）未通过；试验累计 121 个 |
 | 待用户决定 | Q6 服务器地区、Q12 正式资金规模、C4（demo 观察满 4 周后是否上实盘） |
 
@@ -143,7 +143,7 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 
 5. 每周运行 `forward` 周报，把结果追加到 `doc/demo_log.md` 的周表；满 4 周、对账无差错后到达检查点 C4，向用户汇报。
 6. 打版本 tag（例如 `v1.0.0`），写 `CHANGELOG.md`；如有需要，按当前提交重新生成部署包。
-7. 问用户如何处理 `.dockerignore` 的未提交改动（建议提交）。
+7. ~~问用户如何处理 `.dockerignore` 的未提交改动~~：已提交（aa0b79e）。
 8. 用户在 testnet 注册 Ed25519 公钥后，实测 Ed25519 签名（代码已支持：`BINANCE_KEY_TYPE=ed25519`、`BINANCE_PRIVATE_KEY_PATH`）。
 
 **P2：只在用户决定之后**

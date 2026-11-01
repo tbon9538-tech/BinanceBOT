@@ -60,7 +60,7 @@
 |---|---|---|
 | C1 版本 tag `v1.0.0` 与 `CHANGELOG.md` | 开发 | tag 指向当时的 master；CHANGELOG 汇总 M0～M7、R2、D-062/D-063 等关键修复 |
 | C2 重新生成部署包 | 开发 | `dist/` 中的包与 tag 对应（旧包 21f7e18 删除或标注过期） |
-| C3 `.dockerignore` 未提交改动 | 用户确认 → 开发 | 提交或撤销 |
+| ~~C3 `.dockerignore` 未提交改动~~ | — | 已完成：用户同意，已提交（aa0b79e） |
 | C4' Ed25519 实测 | 用户在 testnet 注册公钥 → 开发 | testnet 上 `status` 与一次 `--force-rebalance` 成功 |
 | C5 小缺口 | 开发 | 下单前检查 `MAX_POSITION`；`forward` 命令加单元测试；合并 `tests/test_run_once.py` 与 `bot/backtest/sim_env.py` 的重复构造代码；日报显示 ensemble 仓位乘数 |
 
@@ -131,7 +131,6 @@
 | A1/A2 的 token 与心跳地址 | 现在 | 没有它们就没有任何告警 |
 | A4 是否建私有远端仓库 | 现在 | 代码异地备份 |
 | A5 轮换 Key | 现在 | 安全 |
-| C3 `.dockerignore` | 随时 | 收尾 |
 | C4 检查点三选一 | 约 2026-11-30 | 是否进入实盘准备 |
 | Q6 服务器地区 | 进入 D 时 | 部署与合规 |
 | Q12 正式资金规模 | D4 之后 | 资金 |
