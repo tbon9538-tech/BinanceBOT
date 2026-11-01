@@ -20,3 +20,6 @@ doc/research/scratch/out/explore_curves.csv
 .mypy_cache/
 .ruff_cache/
 .hypothesis/
+
+# Claude Code 本地目录（子任务工作树等）
+.claude/
