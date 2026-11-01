@@ -1,7 +1,7 @@
 # 策略配置（spec §10.1）。所有参数在这里配置，代码中不得硬编码。
 # 标为【待研究 Exx】的参数由 doc/strategy_research.md 中对应编号的实验决定，开发者不得自行调参。
 
-env: testnet                  # testnet | demo | live（live 需要额外确认，见 spec §13）
+env: demo                     # testnet | demo | live（live 需要额外确认，见 spec §13）；2026-11-01 起 demo 前向观察（Q14）
 dry_run: false                # true：只计算并输出订单计划，不下单
 strategy_id: mom1             # 1~6 位小写字母或数字，会出现在 clientOrderId 中
 account_id: spot-main
