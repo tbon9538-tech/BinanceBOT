@@ -199,7 +199,11 @@ def cmd_capital(cfg: AppConfig, args: argparse.Namespace) -> int:
     managed = managed_assets(repo, cfg)
     prices = _prices_for(acct, managed, rules)
     nav = ledger.compute_nav(balances, prices, managed).nav
-    details = {"balances": {a: str(b.total) for a, b in balances.items()}, "note": args.note}
+    details = {
+        "balances": {a: str(b.total) for a, b in balances.items()},
+        "note": args.note,
+        "fills_through": DailyRunner(deps)._fills_through(),
+    }
     if args.acknowledge:
         units, navu = DailyRunner(deps)._units(nav)
         repo.append_nav_snapshot(strategy_id=cfg.strategy_id, account_id=cfg.account_id, kind="ACK", nav_usdt=nav,

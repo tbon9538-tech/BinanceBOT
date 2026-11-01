@@ -149,6 +149,8 @@ def test_first_run_builds_positions_then_is_idempotent(env) -> None:  # type: ig
     r2 = DailyRunner(deps).run_once()  # 同一运行日再跑：只更新快照，不下单
     assert r2.status == "DONE" and len(acct.placed) == n
     assert any("今天已完成调仓" in m for m in r2.messages)
+    # 时钟静止时（成交记录时间晚于快照时间若干微秒），余额核对也不能误报（D-063）
+    assert not deps.repo.list_events("mom1", type_="UNEXPLAINED_BALANCE_CHANGE")
 
 
 def test_dry_run_places_no_orders(env) -> None:  # type: ignore[no-untyped-def]

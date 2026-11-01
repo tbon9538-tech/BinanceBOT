@@ -301,7 +301,7 @@ class DailyRunner:
         repo.append_nav_snapshot(
             strategy_id=cfg.strategy_id, account_id=cfg.account_id, kind="POST_TRADE", nav_usdt=post.nav,
             units=units, nav_per_unit=post.nav / units, gross_exposure=post.gross, run_id=run_id,
-            details={"balances": {a: str(b.total) for a, b in balances.items()}},
+            details={"balances": {a: str(b.total) for a, b in balances.items()}, "fills_through": self._fills_through()},
         )  # fmt: skip
         status = "DRY_RUN" if dry and trading else ("DONE" if (trading or already_done) else "SKIPPED")
         repo.set_run_status(run_id, "DONE" if status in ("DONE", "DRY_RUN") else "SKIPPED", signal_date=t)
@@ -460,17 +460,28 @@ class DailyRunner:
         if not snaps:
             return {}
         base = snaps[-1]
-        prev = {a: Decimal(v) for a, v in json.loads(base.details_json).get("balances", {}).items()}
+        info = json.loads(base.details_json)
+        # 以快照记下的"已包含的最后一笔成交"为界，不依赖快照时间与成交记录时间的先后（时钟分辨率、回放时钟）
+        after = (
+            max(base.time, datetime.fromisoformat(info["fills_through"]))
+            if info.get("fills_through")
+            else base.time
+        )
+        prev = {a: Decimal(v) for a, v in info.get("balances", {}).items()}
         managed = managed_assets(repo, cfg) | {QUOTE}
         cur = {a: b.total for a, b in balances.items() if a in managed}
         prev = {a: v for a, v in prev.items() if a in managed}
         explained = {
             a: repo.net_asset_change(
-                a, strategy_id=cfg.strategy_id, account_id=cfg.account_id, recorded_after=base.time
+                a, strategy_id=cfg.strategy_id, account_id=cfg.account_id, recorded_after=after
             )
             for a in managed
         }
         return ledger.unexplained_changes(prev, cur, explained, prices)
+
+    def _fills_through(self) -> str | None:
+        fills = self.d.repo.list_fills(self.cfg.strategy_id, self.cfg.account_id)
+        return max(f.recorded_at for f in fills).isoformat() if fills else None
 
     def _price_deviation(self, prices: Mapping[str, Decimal]) -> dict[str, float]:
         """执行环境价格与 live 公共行情的偏差；testnet 价格独立于 live，不检查（spec §5.4）。"""
