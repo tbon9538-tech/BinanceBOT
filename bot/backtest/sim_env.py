@@ -96,9 +96,9 @@ def sim_rules(symbol: str, base: str, ref_price: Decimal | None = None) -> Symbo
     """模拟用的交易规则。给出参考价时按价格设定 tickSize 与 stepSize（低价币如 PEPE 也能正常下单）。"""
     tick, step = D("0.0001"), D("0.00001")
     if ref_price is not None and ref_price > 0:
-        mag = int(math.floor(math.log10(float(ref_price))))
+        mag = math.floor(math.log10(float(ref_price)))
         tick = D(10) ** (mag - 5)
-        step = D(10) ** (int(math.floor(math.log10(10 / float(ref_price)))) - 3)
+        step = D(10) ** (math.floor(math.log10(10 / float(ref_price))) - 3)
     return SymbolRules(
         symbol=symbol, base_asset=base, quote_asset="USDT", status=SymbolStatus.TRADING, tick_size=tick,
         min_price=tick, max_price=D("1000000"), step_size=step, min_qty=step,

@@ -65,7 +65,7 @@ def drill_kill_file(work: Path) -> str:
 
 
 def drill_network_down(work: Path) -> str:
-    deps, acct, market, clock = build_sim_deps(CFG, work, RUN_DATE)
+    deps, acct, market, _ = build_sim_deps(CFG, work, RUN_DATE)
     market.offline = True
     r1 = DailyRunner(deps).run_once()
     events = [e.type for e in deps.repo.list_events("mom1")]
