@@ -293,3 +293,14 @@ R8b:
   title: 对照组：当前配置（不做山寨季过滤）在新研究窗口上的结果
   variants:
     - name: current
+
+# ---- R7：空仓 USDT 理财收益估算（预注册见 doc/research/log.md "R7 预注册"；研究窗口 2020-01-01 ～ 2026-10-31）----
+R7:
+  title: 闲置 USDT 按固定年化收益计息（估算，不是选参）
+  hypothesis: 当前配置平均约 70% 资金闲置，按 4% 年化计息每年约增加 2～3 个百分点，且两段的夏普和 Calmar 都不降低
+  criteria: 见研究日志 R7 预注册
+  variants:
+    - {name: y0, overrides: {backtest.cash_yield_annual: 0.0}}
+    - {name: y2, overrides: {backtest.cash_yield_annual: 0.02}}
+    - {name: y4, overrides: {backtest.cash_yield_annual: 0.04}}
+    - {name: y6, overrides: {backtest.cash_yield_annual: 0.06}}
