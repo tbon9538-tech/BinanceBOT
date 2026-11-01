@@ -1,0 +1,17 @@
+# 运行时与密钥
+.env
+*.pem
+data/
+logs/
+reports/
+KILL
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 探索性分析：下载的行情和可再生成的大文件
+doc/research/scratch/data/
+doc/research/scratch/out/explore_curves.csv

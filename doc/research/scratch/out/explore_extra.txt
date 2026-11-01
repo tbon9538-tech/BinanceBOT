@@ -1,0 +1,34 @@
+== 最大的 3 段回撤（峰值, 谷底, 恢复日, 回撤）==
+v2_default: [(datetime.date(2021, 11, 8), datetime.date(2023, 10, 17), datetime.date(2024, 3, 2), np.float64(-0.436)), (datetime.date(2024, 3, 11), datetime.date(2024, 8, 3), '未恢复', np.float64(-0.313)), (datetime.date(2020, 2, 14), datetime.date(2020, 5, 11), datetime.date(2020, 8, 3), np.float64(-0.207))]
+no_stop: [(datetime.date(2021, 11, 25), datetime.date(2023, 10, 17), datetime.date(2023, 12, 21), np.float64(-0.387)), (datetime.date(2024, 3, 11), datetime.date(2024, 8, 3), datetime.date(2024, 12, 6), np.float64(-0.326)), (datetime.date(2020, 2, 14), datetime.date(2020, 5, 11), datetime.date(2020, 8, 4), np.float64(-0.226))]
+cand_v3: [(datetime.date(2022, 4, 1), datetime.date(2023, 10, 19), datetime.date(2024, 3, 6), np.float64(-0.251)), (datetime.date(2024, 3, 9), datetime.date(2024, 8, 3), datetime.date(2024, 11, 11), np.float64(-0.213)), (datetime.date(2020, 2, 14), datetime.date(2020, 5, 11), datetime.date(2020, 6, 1), np.float64(-0.137))]
+BTC_sma100_trend: [(datetime.date(2021, 11, 8), datetime.date(2022, 11, 9), datetime.date(2023, 12, 2), np.float64(-0.431)), (datetime.date(2021, 4, 13), datetime.date(2021, 9, 21), datetime.date(2021, 10, 15), np.float64(-0.301)), (datetime.date(2021, 1, 8), datetime.date(2021, 1, 27), datetime.date(2021, 2, 8), np.float64(-0.252))]
+BTC_hold: [(datetime.date(2021, 11, 8), datetime.date(2022, 11, 21), datetime.date(2024, 3, 4), np.float64(-0.766)), (datetime.date(2020, 2, 14), datetime.date(2020, 3, 12), datetime.date(2020, 7, 27), np.float64(-0.536)), (datetime.date(2021, 4, 13), datetime.date(2021, 7, 20), datetime.date(2021, 10, 19), np.float64(-0.531))]
+
+== 前后半段 Sharpe / CAGR / MDD（2020-01~2022-09 | 2022-10~2025-06）==
+v2_default         H1 SR=1.81 CAGR=57.5% MDD=-20.7% | H2 SR=0.50 CAGR=10.7% MDD=-31.7%
+no_stop            H1 SR=1.81 CAGR=60.3% MDD=-22.6% | H2 SR=0.63 CAGR=15.6% MDD=-32.6%
+lb14_skip0         H1 SR=2.31 CAGR=84.2% MDD=-22.5% | H2 SR=0.76 CAGR=19.9% MDD=-30.4%
+lb28_skip0         H1 SR=1.93 CAGR=68.5% MDD=-21.0% | H2 SR=0.75 CAGR=20.1% MDD=-30.8%
+score_blend        H1 SR=1.71 CAGR=57.4% MDD=-21.9% | H2 SR=0.73 CAGR=18.8% MDD=-29.1%
+ts_basket_top10    H1 SR=1.82 CAGR=65.1% MDD=-25.8% | H2 SR=0.69 CAGR=16.4% MDD=-26.0%
+universe_rank40    H1 SR=2.43 CAGR=91.3% MDD=-20.2% | H2 SR=0.38 CAGR=7.1% MDD=-32.3%
+cand_v3            H1 SR=2.53 CAGR=72.8% MDD=-13.7% | H2 SR=0.49 CAGR=8.9% MDD=-22.9%
+BTC_sma100_trend   H1 SR=1.44 CAGR=84.3% MDD=-34.9% | H2 SR=1.48 CAGR=66.4% MDD=-21.6%
+BTC_hold           H1 SR=0.87 CAGR=43.5% MDD=-72.7% | H2 SR=1.52 CAGR=86.1% MDD=-28.1%
+
+== BTC 趋势 + 波动率目标（同风险对照）==
+BTC_trend_vt0.25: CAGR=0.324 Vol=0.218 Sharpe=1.395 MDD=-0.261 Calmar=1.242
+BTC_trend_vt0.30: CAGR=0.388 Vol=0.258 Sharpe=1.398 MDD=-0.306 Calmar=1.270
+BTC_trend_vt0.40: CAGR=0.482 Vol=0.325 Sharpe=1.374 MDD=-0.363 Calmar=1.330
+
+== 组合：50% BTC 趋势(vt0.30) + 50% 动量袖子（每日再平衡近似）==
+blend_BTCvt30+v2_default: CAGR=0.362 Vol=0.246 Sharpe=1.376 MDD=-0.341 Calmar=1.060
+blend_BTCvt30+no_stop: CAGR=0.382 Vol=0.254 Sharpe=1.403 MDD=-0.308 Calmar=1.242
+blend_BTCvt30+cand_v3: CAGR=0.387 Vol=0.221 Sharpe=1.591 MDD=-0.236 Calmar=1.638
+BTC_trend_vt0.30 与 v2_default 日收益相关系数: 0.69
+
+== Sharpe 估计的抽样误差（年化 SR 的近似标准误，Lo 2002 iid 近似）==
+SR=0.8: SE≈0.49（样本 5.5 年）
+SR=1.2: SE≈0.56（样本 5.5 年）
+SR=1.5: SE≈0.62（样本 5.5 年）
