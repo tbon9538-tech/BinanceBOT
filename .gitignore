@@ -1,9 +1,9 @@
 # 运行时与密钥
 .env
 *.pem
-data/
-logs/
-reports/
+/data/
+/logs/
+/reports/
 KILL
 
 # Python
