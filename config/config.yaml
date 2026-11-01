@@ -12,8 +12,8 @@ data:
   history_days: 800
 
 universe:                     # 只用于卫星袖子
-  universe_size: 30           # 【待研究 E1】
-  min_median_quote_volume: 5000000   # 【待研究 E1】
+  universe_size: 30           # E1 已定（保留默认）
+  min_median_quote_volume: 5000000   # E1 已定（保留默认）
   volume_median_days: 30
   min_listing_days: 90
   segment_gap_days: 7
@@ -21,18 +21,18 @@ universe:                     # 只用于卫星袖子
 
 regime:
   symbol: BTCUSDT
-  sma_period: 100             # 【待研究 E2】
-  buffer: 0.02                # 【待研究 E2】
+  sma_period: 100             # E2a 已定（保留默认；邻域稳健性未通过，见研究日志）
+  buffer: 0.02                # E2a 已定（保留默认）
   replay_days: 730
-  risk_on_mode: ramp          # ramp | immediate【待研究 E2c】
+  risk_on_mode: ramp          # ramp | immediate；E2c 已定
 
 sleeves:
   core:
     enabled: true
     type: trend
-    capital_weight: 0.5       # 【待研究 E7】
+    capital_weight: 0.5       # E7 已定
     symbols: [BTCUSDT]
-    target_annual_vol: 0.30   # 【待研究 E4】
+    target_annual_vol: 0.35   # E4a 已定（原 0.30）：bootstrap 回撤 80 分位 ≤ 35% 的最大值
     vol_lookback: 30
     max_gross: 0.95
     rebalance_mode: smoothed  # smoothed | weekly
@@ -41,17 +41,17 @@ sleeves:
   satellite:
     enabled: true
     type: xs_momentum
-    capital_weight: 0.5       # 【待研究 E7】
+    capital_weight: 0.5       # E7 已定
     exclude_symbols: [BTCUSDT]
-    momentum_lookback: 28     # 【待研究 E3a】
-    momentum_skip: 0          # 【待研究 E3b】
-    score: ret_over_vol       # ret_over_vol | ret | blend【待研究 E3c】
-    max_lookback_return: 1.5  # null 表示关闭【待研究 E5】
+    momentum_lookback: 21     # E3a 已定（原 28）：两段与 6 个年度均不差，邻域为高原
+    momentum_skip: 0          # E3b 已定
+    score: ret_over_vol       # ret_over_vol | ret | blend；E3c 已定
+    max_lookback_return: 1.5  # null 表示关闭；E5 已定（保留，防拉盘）
     coin_sma_period: 50
     top_n: 5
     weighting: equal          # equal | inverse_vol
     max_weight_per_coin: 0.25
-    target_annual_vol: 0.30   # 【待研究 E4】
+    target_annual_vol: 0.35   # E4a 已定（原 0.30）：bootstrap 回撤 80 分位 ≤ 35% 的最大值
     vol_lookback: 30
     max_gross: 0.95
     rebalance_mode: smoothed
@@ -59,7 +59,7 @@ sleeves:
     rebalance_weekday: 0
 
 rebalance:
-  threshold_mode: relative    # absolute | relative【待研究 E8】
+  threshold_mode: relative    # absolute | relative；E8 已定
   threshold: 0.02             # absolute 模式：|W − cw| < threshold 时跳过
   threshold_rel: 0.25         # relative 模式：|W − cw| < threshold_rel × max(W, cw) 时跳过
   min_trade_usdt: 10          # 两种模式都生效
@@ -67,11 +67,11 @@ rebalance:
 
 risk:
   trailing_stop:
-    enabled: false            # 【待研究 E6】
+    enabled: false            # E6 已定（止损为负贡献）
     atr_period: 14
     atr_multiplier: 2.5
     cooldown_days: 7
-  max_drawdown_halt: 0.40     # M2 结束后按"正式回测最大回撤 × 1.5，上限 0.5"重新设定
+  max_drawdown_halt: 0.40     # 已定：正式回测最大回撤 26.9% × 1.5 ≈ 0.40
   daily_anomaly_limit: 0.15
   data_sanity_max_deviation: 0.20
   force_exit_assets: []
