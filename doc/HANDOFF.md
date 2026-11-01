@@ -7,7 +7,7 @@
 
 ## 1. 一句话现状
 
-币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（335 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。目前在用户本机（macOS）用 Docker 常驻跑 **demo 前向观察**（2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机，原电脑的容器已删除）。
+币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（340 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。目前在用户本机（macOS）用 Docker 常驻跑 **demo 前向观察**（2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机，原电脑的容器已删除）。
 
 | 项目 | 状态 |
 |---|---|
@@ -26,7 +26,7 @@
 3. `doc/ROADMAP.md`：**接下来怎么走**（阶段 A～D、研究线 R、功能线 F、阶段 2、用户决策点）。
 4. `doc/dev_plan.md`：开头的**进度表**、检查点 C0～C4、§4 防过拟合规则。
 5. `doc/open_questions.md`：顶部的**决策记录表**（Q0～Q14 都已决定，Q6 地区和 Q12 资金规模部分待定）。
-6. `doc/DECISIONS.md`（D-001～D-070）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
+6. `doc/DECISIONS.md`（D-001～D-072）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
 7. `doc/binance_momentum_bot_spec.md`：需求说明 v3；文末有"v3 修订"和"v3 实现阶段修订"两张表。
 8. `doc/research/log.md`：研究日志，包括全部预注册、结论，以及 E11 保留集和 R2 结果。
 9. `doc/testnet_log.md`、`doc/demo_log.md`：联调与前向观察记录。
@@ -70,6 +70,7 @@ docker compose logs -f bot
 | `data/market.db` | 行情缓存：775 个 USDT 交易对（含 255 个已下架），2018-01 起；容器每天通过 REST 增量更新 |
 | `data/state-demo.db` | demo 状态库（受管持仓、外部基线、快照、订单意图、成交） |
 | `logs/bot.log` | 运行日志（从原电脑搬来，接着写） |
+| `data/backup/` | 状态库自动备份 `state-<env>-<UTC 时间>.db`，每次运行正常结束后一份，保留 30 份（D-072）；恢复步骤见 README §8 |
 
 本机只搬来了上面几项。原 Windows 电脑上还有 `data/raw/`（data.binance.vision 原始 zip）、`data/state-testnet.db`（testnet 状态库及 D-062 之前的备份）、`reports/`（完整回测报告，摘要已在 `doc/research/reports/`）和旧部署包 `dist/binance-bot-0.1.0-21f7e18/`，**本机没有**；做 testnet 联调或重跑研究前需要另行复制或重新生成。
 
@@ -138,11 +139,11 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 
 > 完整路线图（阶段、退出条件、依赖、用户决策点）见 `doc/ROADMAP.md`；本节是其中近期部分的摘要。
 
-**P0：监控与数据安全（目前没有任何告警）**
+**P0：监控与数据安全（Telegram 与心跳仍未配置，目前没有任何告警）**
 
 1. 配置 Telegram：需要用户提供 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`，写入 `.env`。
-2. 配置心跳：需要用户在 healthchecks.io 创建检查，把 `https://hc-ping.com/<uuid>` 填入 `notify.heartbeat_url`。
-3. 状态库自动备份：建议每次运行成功后，把 `data/state-<env>.db` 用 SQLite backup API 复制到 `data/backup/`，保留 30 份。尚未实现。
+2. 配置心跳：需要用户在 healthchecks.io 创建检查（周期 1 天、宽限 2 小时），把 `https://hc-ping.com/<uuid>` 写入 `.env` 的 `HEARTBEAT_URL`（2026-11-02 已改为从 `.env` 读取，D-071），然后 `docker compose up -d`。`status` 的"通知"一行显示是否已配置。
+3. ~~状态库自动备份~~：已完成（2026-11-02，D-072）。在本机真实 demo 库上验证：备份后恢复到独立目录，`status` 输出与原库一致。
 4. ~~代码异地备份~~：已推送到 https://github.com/tbon9538-tech/BinanceBOT （公开仓库，用户指定）。
 
 **P1：demo 观察与收尾**
@@ -178,4 +179,4 @@ docker compose exec bot uv run --no-sync python -m bot status
 docker compose logs --tail 20 bot
 ```
 
-预期：335 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT。
+预期：340 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT，最后一行显示通知是否已配置和备份份数。

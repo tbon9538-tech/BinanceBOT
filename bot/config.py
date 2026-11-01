@@ -250,13 +250,25 @@ class ResearchConfig(_Model):
 
 class NotifyConfig(_Model):
     telegram_enabled: bool = True  # 只发通知，不接收命令（D-006）
-    heartbeat_url: str | None = None  # M6
+    heartbeat_enabled: bool = True  # 地址放在 .env 的 HEARTBEAT_URL（D-071）
     daily_report: bool = True
 
-    @field_validator("heartbeat_url")
+    @model_validator(mode="before")
     @classmethod
-    def _heartbeat(cls, v: str | None) -> str | None:
-        return None if v is None else _check_host(v, HEARTBEAT_HOSTS, "notify.heartbeat_url")
+    def _heartbeat_url_moved(cls, data: Any) -> Any:
+        if isinstance(data, Mapping) and "heartbeat_url" in data:
+            raise ValueError(
+                "notify.heartbeat_url 已移到 .env 的 HEARTBEAT_URL（D-071）：心跳地址相当于密钥，不能写进公开仓库"
+            )
+        return data
+
+
+class BackupConfig(_Model):
+    """状态库自动备份（ROADMAP A3）：每次运行正常结束后复制 data/state-<env>.db。"""
+
+    enabled: bool = True
+    dir: Path = Path("data/backup")
+    keep: int = Field(30, ge=1)  # 每个环境保留最近几份
 
 
 class LoggingConfig(_Model):
@@ -281,6 +293,7 @@ class AppConfig(_Model):
     backtest: BacktestConfig = BacktestConfig()
     research: ResearchConfig = ResearchConfig()
     notify: NotifyConfig = NotifyConfig()
+    backup: BackupConfig = BackupConfig()
     logging: LoggingConfig = LoggingConfig()
 
     @field_validator("strategy_id")

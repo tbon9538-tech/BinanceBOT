@@ -99,8 +99,13 @@ research:
 
 notify:
   telegram_enabled: true      # 只发通知，不接收命令（Q5 选 C）；没有配置 token 时自动降级为只写日志
-  heartbeat_url: null         # M6：每次运行成功后 ping，例如 https://hc-ping.com/<uuid>；null 表示关闭
+  heartbeat_enabled: true     # 每次运行成功后 ping；地址写在 .env 的 HEARTBEAT_URL（D-071，公开仓库不能提交）；没写则不发
   daily_report: true
+
+backup:                       # A3：每次运行正常结束后，用 SQLite 在线备份复制 data/state-<env>.db
+  enabled: true
+  dir: data/backup
+  keep: 30                    # 每个环境保留最近 30 份
 
 logging:
   level: INFO

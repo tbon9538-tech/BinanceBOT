@@ -20,7 +20,8 @@ def test_shipped_config_loads() -> None:
     assert cfg.rebalance.threshold_mode == "relative"
     assert cfg.rebalance.threshold_rel == 0.25
     assert cfg.risk.trailing_stop.enabled is False
-    assert cfg.notify.heartbeat_url is None
+    assert cfg.notify.heartbeat_enabled is True  # 地址在 .env（D-071）
+    assert cfg.backup.enabled is True and cfg.backup.keep == 30
 
 
 def test_shipped_assets_load() -> None:
@@ -125,20 +126,9 @@ def test_unknown_status_delays_must_increase(base_cfg, write_yaml) -> None:  # t
     _expect_error(write_yaml, base_cfg, "严格递增")
 
 
-@pytest.mark.parametrize(
-    ("url", "ok"),
-    [
-        ("https://hc-ping.com/0f3e5a6c-1111-2222-3333-444455556666", True),
-        ("http://hc-ping.com/abc", False),
-        ("https://example.com/ping", False),
-    ],
-)
-def test_heartbeat_url_allowlist(base_cfg, write_yaml, url, ok) -> None:  # type: ignore[no-untyped-def]
-    base_cfg["notify"]["heartbeat_url"] = url
-    if ok:
-        assert load_config(write_yaml(base_cfg)).notify.heartbeat_url == url
-    else:
-        _expect_error(write_yaml, base_cfg, "spec §13")
+def test_heartbeat_url_in_config_is_rejected(base_cfg, write_yaml) -> None:  # type: ignore[no-untyped-def]
+    base_cfg["notify"]["heartbeat_url"] = "https://hc-ping.com/0f3e5a6c-1111-2222-3333-444455556666"
+    _expect_error(write_yaml, base_cfg, "HEARTBEAT_URL")
 
 
 def test_market_data_host_allowlist(base_cfg, write_yaml) -> None:  # type: ignore[no-untyped-def]

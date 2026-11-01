@@ -6,6 +6,7 @@ from decimal import Decimal
 import httpx
 import pytest
 
+from bot.domain.errors import ConfigError
 from bot.domain.types import Balance, SystemState
 from bot.logging_setup import SecretFilter, mask
 from bot.notify import heartbeat
@@ -134,6 +135,18 @@ def test_heartbeat_allowlist_and_failures() -> None:
     assert hits == ["https://hc-ping.com/abc"]
 
 
+def test_heartbeat_url_from_env() -> None:
+    url = "https://hc-ping.com/0f3e5a6c-1111-2222-3333-444455556666"
+    assert heartbeat.url_from_env({"HEARTBEAT_URL": url}) == url
+    assert heartbeat.url_from_env({"HEARTBEAT_URL": f"  {url}\n"}) == url
+    assert heartbeat.url_from_env({"HEARTBEAT_URL": ""}) is None
+    assert heartbeat.url_from_env({}) is None
+    for bad in ("http://hc-ping.com/abc-secret", "https://example.com/abc-secret"):
+        with pytest.raises(ConfigError) as ei:
+            heartbeat.url_from_env({"HEARTBEAT_URL": bad})
+        assert "abc-secret" not in str(ei.value)  # 错误信息不带地址
+
+
 def test_secret_filter_scrubs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BINANCE_API_SECRET", "SUPERSECRETVALUE123")
     monkeypatch.setenv("BINANCE_API_KEY", "APIKEY1234567890")
@@ -151,3 +164,11 @@ def test_secret_filter_scrubs(monkeypatch: pytest.MonkeyPatch) -> None:
     text = rec.getMessage()
     assert "SUPERSECRETVALUE123" not in text and "APIKEY1234567890" not in text
     assert mask("APIKEY1234567890") in text and "signature=****" in text and "bot****" in text
+
+
+def test_secret_filter_scrubs_heartbeat_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "https://hc-ping.com/0f3e5a6c-1111-2222-3333-444455556666"
+    monkeypatch.setenv("HEARTBEAT_URL", url)
+    rec = logging.LogRecord("x", logging.INFO, __file__, 1, "GET %s", (url,), None)
+    SecretFilter().filter(rec)
+    assert "0f3e5a6c" not in rec.getMessage()

@@ -114,3 +114,5 @@
 | D-068 | 前向观察工具 | 新增子命令 `forward`：运行情况（漏跑）、执行质量（实际手续费率、相对开盘价的成交偏移）、与研究引擎同期模拟的对比；报告写入 `doc/forward/` | dev_plan M7-3 的周报要求；前向数据只用于观察与检验，不用于调参 |
 | D-069 | 研究框架中的大盘过滤 | 新增 `regime.mode: ensemble`（R2），按处于 Risk-On 的均线比例缩放两个袖子的原始目标；sma / tsmom 模式结果不变（已用 v3 默认配置回测核对） | R2 预注册；未通过，默认仍为 sma |
 | D-070 | 容器中的 KILL 文件位置 | 路径可由环境变量 `BOT_KILL_FILE` 指定（默认项目根目录 `KILL`）；docker-compose 设为 `/app/data/KILL`，主机创建 `data/KILL` 即可生效；周报目录 `doc/forward/` 也挂载到主机 | 原来的 KILL 文件在容器内部，主机上创建无效；容器运行时所有命令通过 `docker compose exec` 执行，避免主机与容器同时操作同一个 SQLite |
+| D-071 | 心跳地址的存放位置 | 从环境变量 `HEARTBEAT_URL`（`.env`）读取；`config.yaml` 只保留开关 `notify.heartbeat_enabled`；配置里再写 `notify.heartbeat_url` 直接报错并提示新位置。域名白名单不变（只允许 https://hc-ping.com），不合规时启动报错，错误信息与日志都不含地址 | 地址里的 uuid 相当于密钥（拿到就能冒充 ping，让宕机不被发现），而仓库是公开的；做法与 Telegram token 一致 |
+| D-072 | 状态库自动备份（ROADMAP A3） | 每次 `run --once`（含常驻模式）正常结束（没有抛异常；LOCKED 不算）后，在进程锁内用 SQLite 在线备份 API 复制状态库到 `backup.dir`（默认 `data/backup/`），文件名 `state-<env>-<UTC 时间>.db`，通过 `integrity_check` 后再改名，每个环境保留最近 `backup.keep`（30）份；失败记 `BACKUP_FAILED` 事件并发 WARN，不改变运行结果 | 在线备份得到一致快照（含 WAL），不影响运行中的连接；FAILED 时不备份，避免损坏的库把好备份挤掉；kill 不备份（紧急路径不增加步骤） |

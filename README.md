@@ -26,7 +26,7 @@ Windows 下如果 `uv` 不在 PATH 上，用 `py -3.13 -m uv` 代替 `uv`。所�
 |---|---|
 | `config/config.yaml` | 全部参数（spec §10.1）。研究定下的取值都有注释，见 [doc/research/proposal_v1.md](doc/research/proposal_v1.md) |
 | `config/assets.yaml` | 资产审核名单：只有 `approved_assets` 中的资产能进入卫星标的池；新资产默认不交易并告警 |
-| `.env` | `BINANCE_API_KEY`、`BINANCE_KEY_TYPE`（hmac / ed25519）、`BINANCE_API_SECRET` 或 `BINANCE_PRIVATE_KEY_PATH`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`。**不得提交** |
+| `.env` | `BINANCE_API_KEY`、`BINANCE_KEY_TYPE`（hmac / ed25519）、`BINANCE_API_SECRET` 或 `BINANCE_PRIVATE_KEY_PATH`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`、`HEARTBEAT_URL`。**不得提交** |
 
 切换环境：修改 `config.yaml` 的 `env: testnet | demo | live`。testnet Key 在 testnet.binance.vision 申请，demo Key 在币安 Demo Trading 页面创建。
 
@@ -113,8 +113,10 @@ Docker Desktop 需要设置为开机自动启动（Settings → General → Star
 ## 8. 监控
 
 - **Telegram**：只发通知（日报、大盘切换、告警），**不接收任何命令**（v1 决定，见 doc/DECISIONS.md D-006）。在 `.env` 中配置 token 与 chat_id；未配置时只写日志。
-- **外部心跳**：在 [healthchecks.io](https://healthchecks.io) 建一个周期 1 天、宽限 2 小时的检查，把 ping 地址（`https://hc-ping.com/<uuid>`）填入 `notify.heartbeat_url`。程序没有运行时由它告警。
+- **外部心跳**：在 [healthchecks.io](https://healthchecks.io) 建一个周期 1 天、宽限 2 小时的检查，把 ping 地址（`https://hc-ping.com/<uuid>`）写入 `.env` 的 `HEARTBEAT_URL`（地址相当于密钥，不放在 config.yaml，D-071）。每次运行成功后 ping 一次；程序没有运行时由它告警。`status` 会显示 Telegram 与心跳是否已配置。
 - **日志**：`logs/bot.log`，按天滚动、保留 90 天，密钥自动打码。
+- **状态库备份**：每次运行正常结束后，自动把 `data/state-<env>.db` 备份到 `data/backup/state-<env>-<UTC 时间>.db`，每个环境保留最近 30 份（`config.yaml` 的 `backup`，D-072）。备份失败只发 WARN，不影响运行。`status` 会显示备份份数。
+  恢复步骤：`docker compose stop bot` → 把选定的备份复制为 `data/state-<env>.db`，并删除同目录下残留的 `state-<env>.db-wal`、`state-<env>.db-shm` → `docker compose start bot` → 用 `status` 核对。备份与原库在同一块磁盘上，防误操作和文件损坏，不防磁盘损坏。
 
 ## 9. 故障演练与执行回放
 

@@ -13,7 +13,7 @@ import sys
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
-SECRET_ENV_VARS = ("BINANCE_API_SECRET", "TELEGRAM_BOT_TOKEN")
+SECRET_ENV_VARS = ("BINANCE_API_SECRET", "TELEGRAM_BOT_TOKEN", "HEARTBEAT_URL")
 MASKED_ENV_VARS = ("BINANCE_API_KEY",)
 _SIGNATURE_RE = re.compile(r"(signature=)[0-9A-Za-z%+/=_-]+")
 _TG_TOKEN_RE = re.compile(r"bot\d+:[A-Za-z0-9_-]{20,}")

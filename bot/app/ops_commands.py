@@ -24,7 +24,9 @@ from bot.exchange.binance.credentials import credentials_present, load_credentia
 from bot.exchange.binance.market_data import BinanceMarketData
 from bot.exchange.binance.spot_account import BinanceSpotAccount
 from bot.logging_setup import setup_logging
+from bot.notify import heartbeat
 from bot.notify.telegram import TelegramNotifier
+from bot.persistence.backup import list_backups
 from bot.persistence.repo import StateRepo
 from bot.risk import ledger
 
@@ -86,14 +88,17 @@ def build_deps(cfg: AppConfig, *, allow_live: bool = False) -> RunDeps:
             cfg.data.market_data_rest, timeout_sec=cfg.execution.http_timeout_sec, rate_state=shared
         )
     )
+    state_db = paths.state_db(cfg.env.value)
     return RunDeps(
         cfg=cfg,
         assets=load_assets(cfg.universe.assets_file),
         account=account,
         market=market,
         store=MarketStore(paths.MARKET_DB),
-        repo=StateRepo.open(paths.state_db(cfg.env.value)),
+        repo=StateRepo.open(state_db),
         notifier=TelegramNotifier(enabled=cfg.notify.telegram_enabled),
+        heartbeat_url=heartbeat.url_from_env() if cfg.notify.heartbeat_enabled else None,
+        state_db=state_db,
     )
 
 
@@ -136,6 +141,14 @@ def cmd_status(cfg: AppConfig, args: argparse.Namespace) -> int:
     managed = managed_assets(repo, cfg)
     print("受管资产：" + ("，".join(f"{a} {bal[a].total}" for a in sorted(managed) if a in bal) or "无"))
     print(f"USDT：{bal[QUOTE].total if QUOTE in bal else 0}")
+    tg = "已配置" if deps.notifier.enabled else "未配置"
+    hb = "已配置" if deps.heartbeat_url else "未配置"
+    if cfg.backup.enabled:
+        backups = list_backups(cfg.backup.dir, paths.state_db(cfg.env.value).stem)
+        bk = f"{len(backups)} 份" + (f"（最近 {backups[-1].name}）" if backups else "")
+    else:
+        bk = "关闭"
+    print(f"通知：Telegram {tg}，心跳 {hb}；状态库备份 {bk}")
     return EXIT_OK
 
 

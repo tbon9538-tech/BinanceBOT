@@ -3,6 +3,7 @@
     1. 进程锁（data/run.lock）→ 2. KILL 文件 / 系统状态 → 3. 时钟、规则、余额
     4. 未决意图与持仓对账 → 5. 行情增量更新与数据检查 → 6. 计算大盘状态与目标（纯函数）
     7. PRE_TRADE 快照与风控判定 → 8~9. 先卖后买 → 10. 对账、POST_TRADE 快照、日报、心跳
+    11. 正常结束后备份状态库（A3）
 
 所有外部依赖（账户、行情、仓库、通知、时钟、睡眠）都通过 RunDeps 注入，便于测试。
 """
@@ -34,6 +35,7 @@ from bot.execution.planner import count_skips, plan_buys, plan_liquidation, plan
 from bot.execution.spot_executor import KILL_MAX_ATTEMPTS, ExecutionReport, SpotExecutor
 from bot.notify import heartbeat
 from bot.notify.telegram import TelegramNotifier
+from bot.persistence.backup import backup_sqlite
 from bot.persistence.repo import StateRepo, TargetWeight
 from bot.risk import guards, ledger
 from bot.risk.guards import Action, GuardInput
@@ -67,7 +69,9 @@ class RunDeps:
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     sleep: Callable[[float], None] = time.sleep
     data_retry_sleep_sec: float = DATA_RETRY_SLEEP_SEC
+    heartbeat_url: str | None = None  # 来自 .env 的 HEARTBEAT_URL（D-071）
     heartbeat_transport: Any = None
+    state_db: Path | None = None  # 状态库文件；None 表示不做自动备份（A3）
 
 
 @dataclass
@@ -141,7 +145,7 @@ class DailyRunner:
             log.warning("另一个运行正在进行（%s），本次退出", self.d.lock_file)
             return RunResult("LOCKED", run_id, ["进程锁被占用"])
         try:
-            return self._run_locked(run_id, run_date, force_rebalance=force_rebalance, dry=dry)
+            res = self._run_locked(run_id, run_date, force_rebalance=force_rebalance, dry=dry)
         except Exception as e:
             log.exception("运行失败")
             with contextlib.suppress(Exception):
@@ -149,6 +153,9 @@ class DailyRunner:
             self._event("UNHANDLED_EXCEPTION", "CRITICAL", {"error": f"{type(e).__name__}: {e}"}, run_id)
             self.d.notifier.send(f"[{self.cfg.strategy_id}] 运行失败：{type(e).__name__}: {e}", "CRITICAL")
             return RunResult("FAILED", run_id, [f"{type(e).__name__}: {e}"])
+        else:
+            self._backup_state(run_id)
+            return res
         finally:
             lock.release()
 
@@ -309,10 +316,23 @@ class DailyRunner:
         repo.set_run_status(run_id, "DONE" if status in ("DONE", "DRY_RUN") else "SKIPPED", signal_date=t)
         self._daily_report(t, tb, post, units, peak, sells, buys, balances, managed, msgs)
         if status == "DONE":
-            heartbeat.ping(cfg.notify.heartbeat_url, transport=self.d.heartbeat_transport)
+            heartbeat.ping(self.d.heartbeat_url, transport=self.d.heartbeat_transport)
         return RunResult(status, run_id, msgs, sells=sells, buys=buys)
 
     # ---------------- 步骤 ----------------
+
+    def _backup_state(self, run_id: str) -> None:
+        """运行正常结束（未抛异常）后备份状态库（A3）。失败只告警，不影响本次运行的结果。"""
+        b = self.cfg.backup
+        if not b.enabled or self.d.state_db is None:
+            return
+        try:
+            backup_sqlite(self.d.state_db, b.dir, now=self.d.now(), keep=b.keep)
+        except Exception as e:
+            log.exception("状态库备份失败")
+            with contextlib.suppress(Exception):
+                self._event("BACKUP_FAILED", "WARN", {"error": f"{type(e).__name__}: {e}"}, run_id)
+            self.d.notifier.send(f"[{self.cfg.strategy_id}] 状态库备份失败：{type(e).__name__}: {e}", "WARN")
 
     def _executor(self, run_id: str, run_date: date, *, abort: Callable[[], bool]) -> SpotExecutor:
         return SpotExecutor(

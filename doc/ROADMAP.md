@@ -21,7 +21,7 @@
    └──► F 功能线（v1.1 / v1.2，按需）       ──►  阶段 2：资金费率套利（实盘稳定 ≥ 3 个月之后）
 ```
 
-**当前位置**：B 第 0 周（2026-11-01 建仓，2026-11-02 起每日自动运行）。A 尚未开始，**目前没有任何告警**，这是最紧迫的缺口。
+**当前位置**：B 第 0 周（2026-11-01 建仓，2026-11-02 起每日自动运行）。A 进行中：A3 已完成，心跳地址已改为从 `.env` 读取；A1/A2 等用户把 token、chat_id 和心跳地址写进 `.env`，在那之前**仍然没有任何告警**。
 
 ---
 
@@ -32,8 +32,8 @@
 | 任务 | 负责 | 输入 | 退出条件 |
 |---|---|---|---|
 | A1 Telegram 通知 | 用户提供 token 与 chat_id → 开发配置 | `.env`：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` | 手动触发一次日报与一次 WARN 告警，手机都能收到 |
-| A2 外部心跳 | 用户在 healthchecks.io 建检查 → 开发配置 | `notify.heartbeat_url`（`https://hc-ping.com/<uuid>`） | 停掉容器后，在约定周期内收到心跳服务的告警 |
-| A3 状态库自动备份 | 开发 | 每次运行成功后，用 SQLite backup API 复制 `data/state-<env>.db` 到 `data/backup/`，保留 30 份 | 单元测试覆盖；从备份恢复后 `status` 结果一致 |
+| A2 外部心跳 | 用户在 healthchecks.io 建检查 → 开发配置 | `.env`：`HEARTBEAT_URL`（`https://hc-ping.com/<uuid>`；2026-11-02 起从 `.env` 读取，D-071） | 停掉容器后，在约定周期内收到心跳服务的告警 |
+| ~~A3 状态库自动备份~~ | 开发 | 每次运行成功后，用 SQLite backup API 复制 `data/state-<env>.db` 到 `data/backup/`，保留 30 份 | 已完成（2026-11-02，D-072）：单元测试覆盖；真实 demo 库备份后恢复，`status` 结果一致 |
 | ~~A4 代码异地备份~~ | — | https://github.com/tbon9538-tech/BinanceBOT （公开，用户指定） | 已完成（2026-11-01）：推送成功；推送前扫描全部历史，没有 Key、`.env`、`data/` |
 | A5 轮换密钥 | 用户 | testnet 与 demo 后台 | 两套 Key 都重新生成，`.env` 已更新，容器重启后 `status` 正常 |
 

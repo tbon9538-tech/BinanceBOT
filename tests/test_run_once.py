@@ -3,22 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
 
 from bot.app.daemon import next_run_at, run_daemon
-from bot.app.run_once import DailyRunner, RunDeps
+from bot.app.run_once import DailyRunner, RunDeps, managed_assets
 from bot.backtest.sim_account import SimSpotAccount
-from bot.config import AppConfig, AssetsConfig
+from bot.config import AppConfig, AssetsConfig, BackupConfig
 from bot.data.store import MarketStore
 from bot.domain.types import Side, SystemState
 from bot.notify.telegram import TelegramNotifier
+from bot.persistence.backup import list_backups
 from bot.persistence.repo import StateRepo
 from tests.conftest import CONFIG_PATH
 from tests.exec_helpers import make_rules
@@ -244,3 +247,42 @@ def test_preexisting_balances_are_external(env) -> None:  # type: ignore[no-unty
     clock.t += timedelta(days=1)
     DailyRunner(deps).run_once()  # 次日：基线保持，没有"无法解释的余额变化"
     assert not deps.repo.list_events("mom1", type_="UNEXPLAINED_BALANCE_CHANGE")
+
+
+def test_successful_run_pings_heartbeat_and_backs_up_state(env, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    deps, _, _ = env
+    hits: list[str] = []
+
+    def ok(req: httpx.Request) -> httpx.Response:
+        hits.append(str(req.url))
+        return httpx.Response(200)
+
+    bdir = tmp_path / "backup"
+    deps = replace(
+        deps,
+        cfg=deps.cfg.model_copy(update={"backup": BackupConfig(dir=bdir, keep=30)}),
+        heartbeat_url="https://hc-ping.com/test-uuid",
+        heartbeat_transport=httpx.MockTransport(ok),
+        state_db=tmp_path / "state.db",
+    )
+    assert DailyRunner(deps).run_once().status == "DONE"
+    assert hits == ["https://hc-ping.com/test-uuid"]
+    [b] = list_backups(bdir, "state")
+    copy = StateRepo.open(b)
+    assert copy.last_run("mom1").status == "DONE"  # type: ignore[union-attr]
+    assert {p.asset for p in copy.list_positions("spot-main", "mom1", managed_only=True)} == managed_assets(
+        deps.repo, deps.cfg
+    )
+    copy.close()
+
+
+def test_backup_failure_only_warns(env, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    deps, _, _ = env
+    deps = replace(
+        deps,
+        cfg=deps.cfg.model_copy(update={"backup": BackupConfig(dir=tmp_path / "backup", keep=30)}),
+        state_db=tmp_path / "missing.db",
+    )
+    assert DailyRunner(deps).run_once().status == "DONE"
+    [ev] = deps.repo.list_events("mom1", type_="BACKUP_FAILED")
+    assert ev.level == "WARN"
