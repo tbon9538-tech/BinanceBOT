@@ -20,6 +20,7 @@
 - `forward` 命令的单元测试。
 
 ### 研究
+- R11：短线研究（`bot/data/intraday.py`、`bot/backtest/intraday.py`、`scripts/research_r11.py`）：网格、日内超跌反弹、日内突破在 5 分钟 K 线上扣费后都未通过预注册标准，短线方向停止（D-089）。
 - R10：资金费率套利袖子与组合的研究回测（`bot/backtest/carry.py`、`bot/data/futures.py`、`scripts/research_r10.py`），只做研究，不涉及交易代码；未通过预注册标准（D-088）。
 - R7：回测引擎支持闲置 USDT 计息（`backtest.cash_yield_annual`，默认 0）；按 4% 估算年化 +3.3 个百分点，demo 不支持理财接口（D-087）。
 - 研究窗口重新划分（Q16，D-085）：第一段保留集并入研究集（2020-01 ～ 2026-10），新保留集从 2026-11-01 开始；报告新增段 A / 段 B 指标（D-086）。
