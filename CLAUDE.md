@@ -19,7 +19,7 @@
 - M0～M7 的代码与文档全部完成，进度表见 `doc/dev_plan.md` 开头。
 - 研究：参数提案 `doc/research/proposal_v1.md`；第一段保留集已运行一次，夏普 0.17，触发"不进入实盘"规则。2026-11-02 起研究集为 2020-01-01 ～ 2026-10-31，新保留集从 2026-11-01 开始（Q16、D-085）。
 - testnet 联调通过（`doc/testnet_log.md`）。Q14 已定：不投入实盘，demo 前向观察 + 新研究。
-- R2（多周期均线集成）、R3（CTREND 式选币信号）、R4（核心 BTC + ETH）已完成，都未通过预注册标准，配置不变。新研究必须先在 `doc/research/log.md` 预注册；保留集不得再运行。
+- R2（多周期均线集成）、R3（CTREND 式选币信号）、R4（核心 BTC + ETH）、R8（山寨季过滤）已完成，都未通过预注册标准，配置不变。新研究必须先在 `doc/research/log.md` 预注册，并同时报告段 A / 段 B（D-085）。
 - 状态库按环境拆分：`data/state-<env>.db`；demo 周报：`python -m bot forward`。
 
 ## 常用命令（在项目根目录执行）

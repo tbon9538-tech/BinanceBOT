@@ -7,14 +7,14 @@
 
 ## 1. 一句话现状
 
-币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（394 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。demo 前向观察 2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机（macOS），原电脑的容器已删除。**2026-11-01 17:06 UTC 起按用户要求暂停自动运行**（开发未完成），等用户说恢复再启动。
+币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（398 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。demo 前向观察 2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机（macOS），原电脑的容器已删除。**2026-11-01 17:06 UTC 起按用户要求暂停自动运行**（开发未完成），等用户说恢复再启动。
 
 | 项目 | 状态 |
 |---|---|
 | 代码仓库 | `/Users/yeto/Documents/BinanceBOT`（macOS），分支 `master`，远端 `origin` = https://github.com/tbon9538-tech/BinanceBOT （**公开仓库**）；当前版本 **v1.0.0**（tag，2026-11-02），更新记录见 `CHANGELOG.md` |
 | 运行状态 | **已暂停**：本机容器 `binancebot-bot-1` 已 `docker compose stop`（不是 kill，未撤单、未清仓；状态库与 demo 持仓 BTC/INJ/PEPE 保持原样）。最后一次运行 `mom1:2026-11-01 DONE`。恢复：用户同意后 `docker compose up -d --build`（按最新代码重建容器；**不要用 `docker compose start bot`**，它启动的是暂停前那个容器，用的是旧镜像），避开北京时间 08:10 前后；之后每天 00:10 UTC 运行一次，`env: demo`。本机是该 demo 账户**唯一**的运行处 |
 | 未提交改动 | 无（`.dockerignore` 排除 `dist` 已经用户同意并提交） |
-| 研究 | E0～E11 完成；保留集**已运行过一次，不得再运行**；R2（多周期均线集成）、R3（CTREND 式选币信号）、R4（核心 BTC + ETH）都未通过；试验累计 139 个 |
+| 研究 | E0～E11 完成；第一段保留集已用过并并入研究集（D-085，研究集 2020-01 ～ 2026-10，新保留集从 2026-11-01 开始）；R2（多周期均线集成）、R3（CTREND 式选币信号）、R4（核心 BTC + ETH）、R8（山寨季过滤）都未通过；试验累计 144 个 |
 | 待用户决定 | Q6 服务器地区、Q12 正式资金规模、C4（demo 观察满 4 周后是否上实盘） |
 
 ---
@@ -26,7 +26,7 @@
 3. `doc/ROADMAP.md`：**接下来怎么走**（阶段 A～D、研究线 R、功能线 F、阶段 2、用户决策点）。
 4. `doc/dev_plan.md`：开头的**进度表**、检查点 C0～C4、§4 防过拟合规则。
 5. `doc/open_questions.md`：顶部的**决策记录表**（Q0～Q14 都已决定，Q6 地区和 Q12 资金规模部分待定）。
-6. `doc/DECISIONS.md`（D-001～D-085）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
+6. `doc/DECISIONS.md`（D-001～D-086）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
 7. `doc/binance_momentum_bot_spec.md`：需求说明 v3；文末有"v3 修订"和"v3 实现阶段修订"两张表。
 8. `doc/research/log.md`：研究日志，包括全部预注册、结论，以及 E11 保留集和 R2 结果。
 9. `doc/testnet_log.md`、`doc/demo_log.md`：联调与前向观察记录。
@@ -186,4 +186,4 @@ docker compose exec bot uv run --no-sync python -m bot status
 docker compose logs --tail 20 bot
 ```
 
-预期：394 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT，最后一行显示通知是否已配置和备份份数。
+预期：398 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT，最后一行显示通知是否已配置和备份份数。
