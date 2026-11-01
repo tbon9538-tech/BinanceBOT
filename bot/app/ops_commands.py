@@ -17,6 +17,7 @@ from bot.app.daemon import run_daemon
 from bot.app.run_once import KILL_FILE, LOCK_FILE, QUOTE, DailyRunner, RunDeps, _prices_for, managed_assets
 from bot.config import AppConfig, load_assets
 from bot.data.store import MarketStore
+from bot.domain.errors import ConfigError
 from bot.domain.types import Env, SystemState
 from bot.exchange.binance.client import BinanceHttpClient, RateLimitState
 from bot.exchange.binance.credentials import credentials_present, load_credentials
@@ -66,7 +67,7 @@ def build_deps(cfg: AppConfig, *, allow_live: bool = False) -> RunDeps:
     load_dotenv(Path(".env"), override=False)
     setup_logging(cfg.logging.level, Path(cfg.logging.dir), cfg.logging.retention_days)
     if not credentials_present():
-        raise RuntimeError("缺少 API Key：请在 .env 中设置 BINANCE_API_KEY 等（见 .env.example）")
+        raise ConfigError("缺少 API Key：请在 .env 中设置 BINANCE_API_KEY 等（见 .env.example）")
     creds = load_credentials()
     shared = RateLimitState() if cfg.env is Env.LIVE else None  # live 时行情与交易共用同一 IP 额度
     account = BinanceSpotAccount(

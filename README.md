@@ -76,6 +76,8 @@ docker compose logs -f
 
 `data/`、`logs/`、`reports/` 挂载为卷；`config/` 只读挂载；`.env` 通过 `env_file` 注入。镜像以非 root 用户运行。
 
+容器内紧急停止：`docker compose exec bot uv run --no-sync python -m bot kill`。
+
 **cron（Linux，不用常驻进程）**
 
 ```cron
