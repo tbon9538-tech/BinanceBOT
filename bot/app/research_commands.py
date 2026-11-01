@@ -164,3 +164,60 @@ def cmd_dsr(cfg: AppConfig, args: argparse.Namespace) -> int:
     (out / "summary.md").write_text(text, encoding="utf-8")
     print(text)
     return EXIT_OK if math.isfinite(dsr) else 4
+
+
+def cmd_holdout(cfg: AppConfig, args: argparse.Namespace) -> int:
+    """保留集一次性检验（spec §3.6、dev_plan M4）。启动条件已在 cli._holdout_checks 中检查。
+
+    使用完整行情库（含保留集），指标与大盘状态机从最早数据开始计算，只评估 [holdout_start, 最近收盘日]。
+    """
+    from bot.app.data_commands import last_closed_day
+    from bot.backtest.data import approx_approved
+    from bot.backtest.research import config_hash, git_commit
+    from bot.data.holdout import HoldoutLog
+    from bot.strategy.indicators import MarketPanel, column_symbol
+
+    log_ = HoldoutLog()
+    first_run = not log_.previous_runs()
+    store = MarketStore(paths.MARKET_DB)
+    assets = load_assets(cfg.universe.assets_file)
+    allowed = approx_approved(store.symbol_meta(), assets)
+    must = {cfg.regime.symbol} | {
+        s for sl in cfg.enabled_sleeves().values() if sl.type == "trend" for s in sl.symbols
+    }
+    frames = {}
+    for sym in sorted((set(store.symbols()) & allowed) | must):
+        df = store.read_symbol(sym)
+        if not df.empty:
+            frames[sym] = df
+    panel = MarketPanel.from_frames(frames, gap_days=cfg.universe.segment_gap_days)
+    start = cfg.research.holdout_start
+    end = min(last_closed_day(), panel.dates[-1].date())
+    base = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    ctx = ResearchContext(base, panel, lambda c: column_symbol(c) in allowed, start, end)
+    run_cfg, res = ctx.run(Variant("holdout"))
+    bench = ctx.benchmarks(run_cfg, EngineOptions.from_config(run_cfg).cost)
+    out = REPORTS_DIR / "holdout_final"
+    title = f"E11 保留集一次性检验（{'首次' if first_run else '非首次运行！'}）"
+    summ = write_report(out, title, res, bench, panel.close[run_cfg.regime.symbol])
+    doc = DOC_REPORTS_DIR / "E11"
+    doc.mkdir(parents=True, exist_ok=True)
+    for f in ("summary.md", "equity.png"):
+        (doc / f).write_bytes((out / f).read_bytes())
+    if not first_run:
+        md = doc / "summary.md"
+        md.write_text(
+            "> ⚠️ **非首次运行**：保留集已经运行过，本结果不能作为独立检验。\n\n"
+            + md.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    keys = ("cagr", "vol", "sharpe", "mdd", "calmar", "avg_gross")
+    log_.append(
+        git_commit=git_commit(),
+        config_hash=config_hash(run_cfg),
+        summary={k: summ[k] for k in keys} | {"start": str(start), "end": str(end)},
+        first_run=first_run,
+    )
+    _print_summary(title, summ)
+    print(f"报告：{doc / 'summary.md'}；运行记录已追加到 {log_.path}")
+    return EXIT_OK

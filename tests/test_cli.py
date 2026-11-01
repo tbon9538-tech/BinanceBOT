@@ -50,7 +50,11 @@ def test_research_command_end_in_holdout_is_rejected(capsys) -> None:  # type: i
     assert "保留集" in capsys.readouterr().err
 
 
-def test_holdout_requires_final_and_today(capsys) -> None:  # type: ignore[no-untyped-def]
+def test_holdout_requires_final_and_today(capsys, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # 绝不能在测试中真的运行保留集：用替身代替真实命令
+    import bot.cli as cli
+
+    monkeypatch.setitem(cli.HANDLERS, "holdout", lambda cfg, args: EXIT_NOT_IMPLEMENTED)
     assert main(["--config", str(CONFIG_PATH), "holdout"]) == EXIT_HOLDOUT_VIOLATION
     assert (
         main(["--config", str(CONFIG_PATH), "holdout", "--final", "--confirm", "2000-01-01"])

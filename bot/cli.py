@@ -15,7 +15,14 @@ from pathlib import Path
 
 from bot import paths
 from bot.app.data_commands import cmd_assets, cmd_data
-from bot.app.research_commands import cmd_backtest, cmd_bootstrap, cmd_dsr, cmd_experiment, cmd_walkforward
+from bot.app.research_commands import (
+    cmd_backtest,
+    cmd_bootstrap,
+    cmd_dsr,
+    cmd_experiment,
+    cmd_holdout,
+    cmd_walkforward,
+)
 from bot.config import AppConfig, load_config
 from bot.data.holdout import HoldoutGuard, HoldoutLog, HoldoutViolation
 from bot.domain.errors import ConfigError, RateLimitedError
@@ -152,6 +159,7 @@ HANDLERS: dict[str, Handler] = {
     "walkforward": cmd_walkforward,
     "bootstrap": cmd_bootstrap,
     "dsr": cmd_dsr,
+    "holdout": cmd_holdout,
 }
 
 RESEARCH_COMMANDS = {"backtest", "experiment", "walkforward", "bootstrap"}
