@@ -315,3 +315,15 @@ R10:
   trailing_days: 7
   combo_carry_weight: [0.3, 0.5]   # 组合中套利袖子的资金比例；主方案 0.5
   cash_yield_annual: 0.04          # 组合中趋势策略闲置现金按 R7 的 4% 计息
+
+# ---- R11：短线研究（5 分钟 K 线；预注册见 doc/research/log.md "R11 预注册"；只做研究）----
+# 由 R11 专用的研究脚本运行（需要 5 分钟数据与逐笔撮合逻辑，不走日线研究引擎），定义写在这里以便追溯。
+R11:
+  symbols: [BTCUSDT, ETHUSDT]
+  bar: 5m
+  capital_usdt: 1000
+  costs: {taker_fee: 0.001, taker_slippage: 0.0005, maker_fee: 0.001, maker_trade_through: 0.0005}
+  S1_grid: {step: [0.005, 0.01, 0.02], main: 0.01, unit: 0.1, max_units: 10}
+  S2_dip: {z_entry: [2.0, 2.5, 3.0], main: 2.5, window_bars: 12, max_hold_bars: 12}
+  S3_breakout: {lookback_hours: [12, 24, 48], main: 24, exit_lookback: half}
+  cost_stress: 1.5
