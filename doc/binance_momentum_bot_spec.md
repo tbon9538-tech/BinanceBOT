@@ -105,7 +105,7 @@ excluded_assets:                                          # 人工确认排除
   other: []
 excluded_patterns:                                        # 正则，作用于 baseAsset
   - '^[A-Z0-9]+(UP|DOWN|BULL|BEAR)$'                      # 杠杆代币
-pattern_exceptions: [JUP, SUPER]                           # 命中正则但不是杠杆代币的资产
+pattern_exceptions: [JUP]                                  # 命中正则但不是杠杆代币的资产（SUPER 不以 UP 结尾，不会被命中）
 ```
 
 规则：

@@ -1,0 +1,19 @@
+# 资产审核名单（spec §2.2）。
+# - 只有 approved_assets 中的资产可以进入卫星袖子的标的池；
+# - 通过流动性筛选、但既不在 approved 也不在 excluded 中的资产为"待审核"，不参与交易，并发出告警；
+# - 审核结果只通过人工编辑本文件生效，程序不得自动写入 approved。
+# approved_assets 的初稿由 M1-6 生成，交给用户审核后再填入。
+
+approved_assets: []
+
+excluded_assets:
+  stablecoins_fiat: [USDC, FDUSD, TUSD, USDP, DAI, BUSD, USD1, USDE, BFUSD, XUSD, RLUSD, PAX, USDS, USDSB, SUSD, UST, USTC,
+                     EUR, EURI, AEUR, GBP, AUD, TRY, BRL, RUB, BIDR, IDRT, UAH, NGN, ZAR, PLN, RON, ARS, JPY, MXN, COP, CZK]
+  wrapped_or_pegged: [WBTC, WBETH, BETH, PAXG, XAUT]
+  tokenized_stocks_etf: []    # 由 M1-6 根据当前 exchangeInfo 列出，交给用户确认
+  other: []
+
+excluded_patterns:            # 正则，作用于 baseAsset
+  - '^[A-Z0-9]+(UP|DOWN|BULL|BEAR)$'   # 杠杆代币
+
+pattern_exceptions: [JUP]              # 命中正则但不是杠杆代币的资产；完整名单由 M1-6 列出命中项后人工确认

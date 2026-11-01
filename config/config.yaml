@@ -1,0 +1,108 @@
+# 策略配置（spec §10.1）。所有参数在这里配置，代码中不得硬编码。
+# 标为【待研究 Exx】的参数由 doc/strategy_research.md 中对应编号的实验决定，开发者不得自行调参。
+
+env: testnet                  # testnet | demo | live（live 需要额外确认，见 spec §13）
+dry_run: false                # true：只计算并输出订单计划，不下单
+strategy_id: mom1             # 1~6 位小写字母或数字，会出现在 clientOrderId 中
+account_id: spot-main
+max_capital_usdt: 500         # Q12：先用 ≤ 500 USDT 验证系统
+
+data:
+  market_data_rest: https://data-api.binance.vision
+  history_days: 800
+
+universe:                     # 只用于卫星袖子
+  universe_size: 30           # 【待研究 E1】
+  min_median_quote_volume: 5000000   # 【待研究 E1】
+  volume_median_days: 30
+  min_listing_days: 90
+  segment_gap_days: 7
+  assets_file: config/assets.yaml
+
+regime:
+  symbol: BTCUSDT
+  sma_period: 100             # 【待研究 E2】
+  buffer: 0.02                # 【待研究 E2】
+  replay_days: 730
+  risk_on_mode: ramp          # ramp | immediate【待研究 E2c】
+
+sleeves:
+  core:
+    enabled: true
+    type: trend
+    capital_weight: 0.5       # 【待研究 E7】
+    symbols: [BTCUSDT]
+    target_annual_vol: 0.30   # 【待研究 E4】
+    vol_lookback: 30
+    max_gross: 0.95
+    rebalance_mode: smoothed  # smoothed | weekly
+    smoothing_days: 7
+    rebalance_weekday: 0      # 仅在 weekly 模式下使用，0 = 周一
+  satellite:
+    enabled: true
+    type: xs_momentum
+    capital_weight: 0.5       # 【待研究 E7】
+    exclude_symbols: [BTCUSDT]
+    momentum_lookback: 28     # 【待研究 E3a】
+    momentum_skip: 0          # 【待研究 E3b】
+    score: ret_over_vol       # ret_over_vol | ret | blend【待研究 E3c】
+    max_lookback_return: 1.5  # null 表示关闭【待研究 E5】
+    coin_sma_period: 50
+    top_n: 5
+    weighting: equal          # equal | inverse_vol
+    max_weight_per_coin: 0.25
+    target_annual_vol: 0.30   # 【待研究 E4】
+    vol_lookback: 30
+    max_gross: 0.95
+    rebalance_mode: smoothed
+    smoothing_days: 7
+    rebalance_weekday: 0
+
+rebalance:
+  threshold_mode: relative    # absolute | relative【待研究 E8】
+  threshold: 0.02             # absolute 模式：|W − cw| < threshold 时跳过
+  threshold_rel: 0.25         # relative 模式：|W − cw| < threshold_rel × max(W, cw) 时跳过
+  min_trade_usdt: 10          # 两种模式都生效
+  run_time_utc: "00:10"
+
+risk:
+  trailing_stop:
+    enabled: false            # 【待研究 E6】
+    atr_period: 14
+    atr_multiplier: 2.5
+    cooldown_days: 7
+  max_drawdown_halt: 0.40     # M2 结束后按"正式回测最大回撤 × 1.5，上限 0.5"重新设定
+  daily_anomaly_limit: 0.15
+  data_sanity_max_deviation: 0.20
+  force_exit_assets: []
+
+execution:
+  mode: ioc                   # v1 只支持 ioc；maker_then_ioc 计划在 v1.1
+  max_slippage: 0.003
+  max_attempts: 2
+  kill_slippage: 0.01
+  fee_buffer: 0.002
+  http_timeout_sec: 10
+  recv_window_ms: 5000
+  unknown_status_query_delays_sec: [1, 3, 10, 30, 60]
+
+backtest:
+  initial_capital: 1000
+  fee: 0.001
+  slippage: 0.0005
+  delist_haircut: 0.5         # 【待研究】
+  start: "2020-01-01"
+  end: "2025-06-30"           # 必须早于 research.holdout_start
+
+research:
+  holdout_start: "2025-07-01"
+
+notify:
+  telegram_enabled: true      # 只发通知，不接收命令（Q5 选 C）；没有配置 token 时自动降级为只写日志
+  heartbeat_url: null         # M6：每次运行成功后 ping，例如 https://hc-ping.com/<uuid>；null 表示关闭
+  daily_report: true
+
+logging:
+  level: INFO
+  dir: logs
+  retention_days: 90

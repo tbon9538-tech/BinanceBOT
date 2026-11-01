@@ -15,3 +15,8 @@ __pycache__/
 # 探索性分析：下载的行情和可再生成的大文件
 doc/research/scratch/data/
 doc/research/scratch/out/explore_curves.csv
+
+# 工具缓存
+.mypy_cache/
+.ruff_cache/
+.hypothesis/

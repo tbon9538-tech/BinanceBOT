@@ -1,0 +1,2 @@
+# 用于 Linux 的脚本必须保持 LF 换行
+*.sh text eol=lf

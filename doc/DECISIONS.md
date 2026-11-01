@@ -47,3 +47,9 @@
 | D-028 | `execution.mode: maker_then_ioc` | v1 配置校验直接拒绝，提示"v1.1 才支持" | 保守：未实现的模式不允许被配置启用 |
 | D-029 | `backtest.end` 与保留集 | 配置校验要求 `backtest.end < research.holdout_start` | 在配置层面就挡住误用保留集 |
 | D-030 | `env: live` 的配置校验 | 要求在 YAML 中**显式**写出 `max_capital_usdt`（不能依赖默认值），否则拒绝加载；`dry_run` 未显式设置时给出警告 | spec §10.1、§13 |
+| D-031 | 配置中的相对路径 | `assets_file`、`logging.dir` 等相对路径，以运行命令时的工作目录（项目根目录）为基准 | 所有命令都从项目根目录运行（CLAUDE.md），规则最简单 |
+| D-032 | 外部域名白名单在配置层强制 | `data.market_data_rest` 只允许 `https://data-api.binance.vision`；`notify.heartbeat_url` 只允许 `https://hc-ping.com/...` | spec §13：外部请求只发往列出的域名；在加载配置时就挡住 |
+| D-033 | ruff 的检查范围 | 排除 `doc/` 和 `*.md` | 新版 ruff 会格式化 Markdown 中的 Python 代码块，曾意外改动 spec 中的示例代码 |
+| D-034 | `pattern_exceptions` 默认值 | 只保留 `JUP`；spec 示例中的 `SUPER` 已删除 | 正则匹配的是后缀，`SUPER` 不以 `UP` 结尾，不会被命中；其余命中项由 M1-6 列出后人工确认 |
+| D-035 | CLI 骨架行为 | M0 阶段每个子命令先加载并校验配置，再提示"尚未实现"；退出码：0 成功、1 配置错误、3 尚未实现（argparse 用法错误为 2） | 便于在 M0 就验证配置，并区分各类失败 |
+| D-036 | uv 的安装方式（开发机） | 用 `py -3.13 -m pip install uv` 安装到本机 Python 3.13；`uv` 不在 PATH 上时用 `py -3.13 -m uv`，`scripts/check.ps1` 会自动退回 | 不修改系统 PATH；服务器和 Docker 中按官方方式安装 |
