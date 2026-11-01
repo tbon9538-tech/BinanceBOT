@@ -28,9 +28,11 @@ def ann_vol(r: pd.Series) -> float:
     return float(r.std(ddof=1) * math.sqrt(ANN_DAYS))
 
 
-def sharpe(r: pd.Series) -> float:
+def sharpe(r: pd.Series, annual_rf: float = 0.0) -> float:
+    """年化夏普（spec §1.2）。annual_rf > 0 时为扣除该年化收益（例如 USDT 理财）后的超额夏普。"""
     sd = r.std(ddof=1)
-    return float(r.mean() / sd * math.sqrt(ANN_DAYS)) if sd and sd > 0 else float("nan")
+    rf = (1 + annual_rf) ** (1 / ANN_DAYS) - 1
+    return float((r.mean() - rf) / sd * math.sqrt(ANN_DAYS)) if sd and sd > 0 else float("nan")
 
 
 def drawdown(nav: pd.Series) -> pd.Series:

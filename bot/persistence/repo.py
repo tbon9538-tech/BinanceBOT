@@ -26,6 +26,7 @@ from bot.domain.types import Fill, IntentStatus, OrderResult, Side
 from bot.persistence.migrations import migrate
 from bot.persistence.models import (
     AccountRow,
+    AssetReviewRow,
     CapitalFlowRow,
     DailyTargetRow,
     EventRow,
@@ -766,6 +767,42 @@ class StateRepo:
     def get_regime_state(self, strategy_id: str, d: date) -> RegimeStateRow | None:
         with self._session() as s:
             return s.get(RegimeStateRow, (strategy_id, d))
+
+    # ---- 资产审核（spec §2.2；审核结果以 assets.yaml 为准，这里只记录待审核与提醒时间） ----
+
+    def asset_reviews(self) -> dict[str, AssetReviewRow]:
+        with self._session() as s:
+            return {r.asset: r for r in s.scalars(select(AssetReviewRow))}
+
+    def upsert_asset_review(
+        self, asset: str, info: Mapping[str, Any], *, now: datetime | None = None
+    ) -> AssetReviewRow:
+        """登记待审核资产：新资产记 PENDING 与首次发现时间；已有的只更新辅助信息。"""
+        t = self._t(now)
+        with self._session() as s, s.begin():
+            row = s.get(AssetReviewRow, asset)
+            if row is None:
+                row = AssetReviewRow(
+                    asset=asset, status="PENDING", first_seen=t, last_notified=None, info_json="{}"
+                )
+                s.add(row)
+            row.info_json = to_json(info)
+            return row
+
+    def mark_asset_reviews_notified(self, assets: Iterable[str], *, now: datetime | None = None) -> None:
+        t = self._t(now)
+        with self._session() as s, s.begin():
+            for a in assets:
+                row = s.get(AssetReviewRow, a)
+                if row is not None:
+                    row.status, row.last_notified = "NOTIFIED", t
+
+    def delete_asset_reviews(self, assets: Iterable[str]) -> None:
+        with self._session() as s, s.begin():
+            for a in assets:
+                row = s.get(AssetReviewRow, a)
+                if row is not None:
+                    s.delete(row)
 
     def list_regime_states(self, strategy_id: str) -> list[RegimeStateRow]:
         with self._session() as s:

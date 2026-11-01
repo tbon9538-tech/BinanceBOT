@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import itertools
+import json
 import re
 import warnings
 from collections.abc import Mapping
@@ -243,6 +245,9 @@ class BacktestConfig(_Model):
     fee: float = Field(0.001, ge=0, lt=0.05)
     slippage: float = Field(0.0005, ge=0, lt=0.05)
     delist_haircut: float = Field(0.5, ge=0, le=1)
+    usdt_yield_annual: float = Field(
+        0.04, ge=0, lt=0.5
+    )  # 只用于报告"扣除 USDT 理财收益"的参考夏普（spec §1.2）
     start: date = date(2020, 1, 1)
     end: date = date(2025, 6, 30)
 
@@ -404,6 +409,12 @@ def _format_validation_error(path: Path, err: ValidationError) -> str:
         loc = ".".join(str(x) for x in e["loc"]) or "(根)"
         lines.append(f"  - {loc}: {e['msg']}")
     return "\n".join(lines)
+
+
+def config_hash(cfg: AppConfig) -> str:
+    """配置内容的短哈希（试验记录、策略登记、保留集运行记录共用）。"""
+    raw = json.dumps(cfg.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha1(raw.encode()).hexdigest()[:10]
 
 
 def _read_yaml(path: Path) -> Mapping[str, Any]:

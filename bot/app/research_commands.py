@@ -71,7 +71,14 @@ def cmd_backtest(cfg: AppConfig, args: argparse.Namespace) -> int:
     bench = ctx.benchmarks(run_cfg, EngineOptions.from_config(run_cfg).cost)
     name = args.name or f"backtest_{start}_{end}"
     out = REPORTS_DIR / name
-    summ = write_report(out, name, res, bench, ctx.panel.close[run_cfg.regime.symbol])
+    summ = write_report(
+        out,
+        name,
+        res,
+        bench,
+        ctx.panel.close[run_cfg.regime.symbol],
+        usdt_yield=run_cfg.backtest.usdt_yield_annual,
+    )
     _print_summary(name, summ)
     print(f"报告：{out}")
     return EXIT_OK
@@ -199,7 +206,14 @@ def cmd_holdout(cfg: AppConfig, args: argparse.Namespace) -> int:
     bench = ctx.benchmarks(run_cfg, EngineOptions.from_config(run_cfg).cost)
     out = REPORTS_DIR / "holdout_final"
     title = f"E11 保留集一次性检验（{'首次' if first_run else '非首次运行！'}）"
-    summ = write_report(out, title, res, bench, panel.close[run_cfg.regime.symbol])
+    summ = write_report(
+        out,
+        title,
+        res,
+        bench,
+        panel.close[run_cfg.regime.symbol],
+        usdt_yield=run_cfg.backtest.usdt_yield_annual,
+    )
     doc = DOC_REPORTS_DIR / "E11"
     doc.mkdir(parents=True, exist_ok=True)
     for f in ("summary.md", "equity.png"):

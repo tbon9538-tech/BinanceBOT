@@ -49,12 +49,17 @@ def regime_intervals(result: BacktestResult, btc_close: pd.Series) -> pd.DataFra
     return pd.DataFrame(out)
 
 
-def build_summary(result: BacktestResult, benchmarks: dict[str, pd.Series]) -> dict[str, Any]:
+def build_summary(
+    result: BacktestResult, benchmarks: dict[str, pd.Series], *, usdt_yield: float = 0.0
+) -> dict[str, Any]:
+    """usdt_yield：年化 USDT 理财收益假设，用于"扣除 USDT 理财收益"的参考夏普（spec §1.2）。"""
     nav = result.nav
     d = result.daily
     summ: dict[str, Any] = stats.summarize(nav)
     summ.update(
         {
+            "usdt_yield_annual": usdt_yield,
+            "sharpe_net_usdt_yield": stats.sharpe(stats.daily_returns(nav), usdt_yield),
             "start": nav.index[0].date().isoformat(),
             "end": nav.index[-1].date().isoformat(),
             "avg_gross": float(d["gross"].mean()),
@@ -90,7 +95,7 @@ def _fmt(x: Any) -> str:
 
 
 def summary_markdown(name: str, summ: dict[str, Any], rebal: pd.DataFrame, intervals: pd.DataFrame) -> str:
-    keys = ["cagr", "vol", "sharpe", "mdd", "calmar", "longest_dd_days", "avg_gross", "cash_days_ratio",
+    keys = ["cagr", "vol", "sharpe", "sharpe_net_usdt_yield", "usdt_yield_annual", "mdd", "calmar", "longest_dd_days", "avg_gross", "cash_days_ratio",
             "turnover_per_year", "total_cost_ratio", "days_le_m10", "days_le_m15", "delist_exits", "stop_events"]  # fmt: skip
     lines = [
         f"# 回测报告：{name}",
@@ -172,9 +177,11 @@ def write_report(
     result: BacktestResult,
     benchmarks: dict[str, pd.Series],
     btc_close: pd.Series,
+    *,
+    usdt_yield: float = 0.0,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    summ = build_summary(result, benchmarks)
+    summ = build_summary(result, benchmarks, usdt_yield=usdt_yield)
     rebal = rebalance_stats(result)
     intervals = regime_intervals(result, btc_close.loc[result.nav.index])
     (out_dir / "summary.json").write_text(

@@ -25,8 +25,9 @@ from typing import Any
 import pandas as pd
 from filelock import FileLock, Timeout
 
+from bot import __version__
 from bot.app.account_view import StrategyAccountView, refresh_baselines
-from bot.config import AppConfig, AssetsConfig, TrendSleeveConfig
+from bot.config import AppConfig, AssetsConfig, TrendSleeveConfig, config_hash
 from bot.data.quality import drop_invalid_bars, missing_days, price_jumps
 from bot.data.store import MarketStore
 from bot.data.sync import SyncReport, sync_rest_tail
@@ -49,6 +50,7 @@ from bot.risk import guards, ledger
 from bot.risk.guards import Action, GuardInput
 from bot.strategy.indicators import MarketPanel, column_symbol
 from bot.strategy.momentum_v1 import MomentumV1
+from bot.strategy.sleeves import rank_universe
 from bot.strategy.smoothing import Overrides
 from bot.strategy.universe import AssetClass, classify_asset
 
@@ -221,6 +223,11 @@ class DailyRunner:
         acct = self.acct = self._view()
         rules = acct.get_all_rules()
         balances = acct.get_balances()
+        repo.ensure_strategy(
+            cfg.strategy_id, name="momentum_v1", version=__version__, config_hash=config_hash(cfg)
+        )
+        if (fee_msg := self._commission_check(acct)) is not None:
+            msgs.append(fee_msg)
 
         # 4) 对账
         ex = self._executor(run_id, run_date, abort=self.d.kill_file.exists)
@@ -323,6 +330,7 @@ class DailyRunner:
         prices = _prices_for(acct, managed, rules)
         if trading and not dry:
             ex.reconcile_positions(balances, prices=prices)
+        self._release_frozen(rules, run_id)
         post = ledger.compute_nav(balances, prices, managed)
         repo.append_nav_snapshot(
             strategy_id=cfg.strategy_id, account_id=cfg.account_id, kind="POST_TRADE", nav_usdt=post.nav,
@@ -420,10 +428,17 @@ class DailyRunner:
             if isinstance(sl, TrendSleeveConfig)
             for s in sl.symbols
         }
+        pending = {  # 待审核资产只用于判断它们是否会进入标的池（spec §2.2 第 2 条），不参与交易
+            s
+            for s, r in rules.items()
+            if r.quote_asset == QUOTE
+            and r.is_trading
+            and classify_asset(r.base_asset, self.d.assets) is AssetClass.PENDING
+        }
         start = (t - timedelta(days=cfg.data.history_days)).isoformat()
         end_excl = (t + timedelta(days=1)).isoformat()
         frames = {}
-        for sym in sorted(allowed | core | {cfg.regime.symbol}):
+        for sym in sorted(allowed | core | {cfg.regime.symbol} | pending):
             df, bad = drop_invalid_bars(store.read_symbol(sym, start, end_excl))  # spec §3.3 第 2 条
             if bad:
                 log.warning("%s 有 %d 根日线不满足 0 < low ≤ min(open, close) ≤ max(open, close) ≤ high，"
@@ -434,19 +449,17 @@ class DailyRunner:
         ts = pd.Timestamp(t)
         force_exit = {f"{a}{QUOTE}" for a in cfg.risk.force_exit_assets}
         managed = managed_assets(self.d.repo, cfg)
-        frozen = {
-            f"{a}{QUOTE}" for a in managed if (r := rules.get(f"{a}{QUOTE}")) is not None and not r.is_trading
-        }
+        frozen = self._update_frozen(managed, rules, run_id)
+        pool = [c for c in panel.columns if column_symbol(c) in allowed | core]
         for sym, move in sorted(
-            price_jumps(panel.close, ts, cfg.data.price_jump_warn).items()
+            price_jumps(panel.close[pool], ts, cfg.data.price_jump_warn).items()
         ):  # spec §3.3 第 3 条
             log.warning("%s 在 %s 的收盘价单日变化 %.0f%%，超过 %.0f%%（只记录，不中止）", sym, t, move * 100,
                         cfg.data.price_jump_warn * 100)  # fmt: skip
-        for sym in sorted(frozen):
-            self._event("HELD_SYMBOL_NOT_TRADING", "CRITICAL", {"symbol": sym}, run_id,
-                        notify=f"持仓 {sym} 在执行环境中不可交易，已冻结：目标权重为 0，按最后价格计入净值")  # fmt: skip
         tradable = {s for s, r in rules.items() if r.is_trading}
-        strat = MomentumV1(cfg, panel, asset_ok=lambda c: column_symbol(c) in allowed)
+        strat = MomentumV1(
+            cfg, panel, asset_ok=lambda c: column_symbol(c) in allowed, exclude_symbols=force_exit
+        )
         tb = strat.target(ts, Overrides(always_excluded=frozenset(force_exit | frozen)))
         weights = {column_symbol(c): w for c, w in tb.weights.items() if column_symbol(c) in tradable}
         self._check_regime_replay(strat.regime, run_id)
@@ -463,27 +476,94 @@ class DailyRunner:
         if tb.switched_on or tb.switched_off:
             self._event("REGIME_SWITCH", "WARN", {"state": tb.regime.value}, run_id)
             self.d.notifier.send(f"[{cfg.strategy_id}] 大盘状态切换为 {tb.regime.value}（{t}）", "WARN")
-        self._review_alert(panel, ts, rules, run_id)
+        self._review_alert(panel, ts, allowed, pending, force_exit, run_id)
         return tb, weights
 
     def _review_alert(
-        self, panel: MarketPanel, t: pd.Timestamp, rules: Mapping[str, SymbolRules], run_id: str
-    ) -> None:
-        """通过流动性筛选的待审核资产（spec §2.2 第 2 条）：同一批资产 7 天内只提醒一次。"""
-        last = self.d.repo.list_events(self.cfg.strategy_id, type_="ASSET_REVIEW_NEEDED")
-        if last and self.d.now() - last[-1].time < timedelta(days=REVIEW_ALERT_DAYS):
+        self, panel: MarketPanel, t: pd.Timestamp, allowed: set[str], pending: set[str], force_exit: set[str],
+        run_id: str,
+    ) -> None:  # fmt: skip
+        """待审核资产（spec §2.2 第 2 条）：如果审核通过就会进入标的池（与已批准资产一起按 §2.4 排名进入前
+        universe_size）的，登记到 asset_review 表并提醒；同一资产 7 天内最多提醒一次。已在 assets.yaml 中审核过的从表中删除。"""
+        repo, now = self.d.repo, self.d.now()
+        reviewed = [
+            a for a in repo.asset_reviews() if classify_asset(a, self.d.assets) is not AssetClass.PENDING
+        ]
+        repo.delete_asset_reviews(reviewed)
+        if not pending:
             return
-        pending = sorted(
-            r.base_asset for s, r in rules.items()
-            if r.quote_asset == QUOTE and r.is_trading and classify_asset(r.base_asset, self.d.assets) is AssetClass.PENDING
-            and s in panel.columns
+        excluded = {
+            s
+            for sl in self.cfg.enabled_sleeves().values()
+            if not isinstance(sl, TrendSleeveConfig)
+            for s in sl.exclude_symbols
+        }
+        ranked = rank_universe(
+            panel, t, self.cfg.universe, exclude_symbols=excluded | force_exit,
+            asset_ok=lambda c: column_symbol(c) in allowed | pending,
         )  # fmt: skip
-        if pending:
-            self._event("ASSET_REVIEW_NEEDED", "INFO", {"assets": pending[:50]}, run_id)
+        due: list[str] = []
+        for col in ranked:
+            sym = column_symbol(col)
+            if sym not in pending:
+                continue
+            asset = sym.removesuffix(QUOTE)
+            row = repo.upsert_asset_review(asset, {"symbol": sym, "rank_date": t.date().isoformat()}, now=now)
+            if row.last_notified is None or now - row.last_notified >= timedelta(days=REVIEW_ALERT_DAYS):
+                due.append(asset)
+        if due:
+            repo.mark_asset_reviews_notified(due, now=now)
+            self._event("ASSET_REVIEW_NEEDED", "INFO", {"assets": due[:50]}, run_id)
             self.d.notifier.send(
-                f"[{self.cfg.strategy_id}] 有 {len(pending)} 个资产待审核，请运行 `python -m bot assets review`",
+                f"[{self.cfg.strategy_id}] 有 {len(due)} 个资产待审核（{'、'.join(due[:10])}），"
+                "请运行 `python -m bot assets review`",
                 "INFO",
             )
+
+    def _update_frozen(self, managed: set[str], rules: Mapping[str, SymbolRules], run_id: str) -> set[str]:
+        """spec §2.5：持仓币在执行环境中不可交易时标记 frozen（持久化）并发 CRITICAL；恢复交易后仍保持冻结，
+        目标权重为 0，由本次订单计划卖出，卖完后再解除（_release_frozen）。返回需要剔除的交易对。"""
+        repo, cfg = self.d.repo, self.cfg
+        out: set[str] = set()
+        for p in repo.list_positions(cfg.account_id, cfg.strategy_id, managed_only=True):
+            if p.asset not in managed or p.asset == QUOTE:
+                continue
+            sym = f"{p.asset}{QUOTE}"
+            r = rules.get(sym)
+            trading = r is not None and r.is_trading
+            if not trading and not p.frozen and p.qty > 0:
+                repo.upsert_position(cfg.account_id, cfg.strategy_id, p.asset, frozen=True)
+                self._event("HELD_SYMBOL_NOT_TRADING", "CRITICAL", {"symbol": sym}, run_id,
+                            notify=f"持仓 {sym} 在执行环境中不可交易，已冻结：目标权重为 0，按最后价格计入净值；"
+                            "恢复交易后自动卖出")  # fmt: skip
+                out.add(sym)
+            elif not trading or p.frozen:
+                out.add(sym)
+        return out
+
+    def _release_frozen(self, rules: Mapping[str, SymbolRules], run_id: str) -> None:
+        """冻结的持仓恢复交易并已卖出（余额为 0 或只剩灰尘）后解除冻结。"""
+        repo, cfg = self.d.repo, self.cfg
+        for p in repo.list_positions(cfg.account_id, cfg.strategy_id, managed_only=True):
+            r = rules.get(f"{p.asset}{QUOTE}")
+            if p.frozen and r is not None and r.is_trading and (p.qty <= 0 or p.dust):
+                repo.upsert_position(cfg.account_id, cfg.strategy_id, p.asset, frozen=False)
+                self._event("HELD_SYMBOL_UNFROZEN", "INFO", {"asset": p.asset}, run_id)
+
+    def _commission_check(self, acct: SpotAccount) -> str | None:
+        """拉取实际费率（spec §6.2 第 3 步）：taker 费率高于回测假设时提示。失败不影响运行。"""
+        sym = self.cfg.regime.symbol
+        try:
+            rates = acct.get_commission_rates(sym)
+        except Exception as e:
+            log.warning("获取 %s 实际费率失败：%s", sym, e)
+            return None
+        taker = max(rates.rate(Side.BUY), rates.rate(Side.SELL))
+        assumed = Decimal(str(self.cfg.backtest.fee))
+        if taker > assumed:
+            log.warning("实际 taker 费率 %s 高于回测假设 %s", taker, assumed)
+            return f"实际 taker 费率 {taker:.4%}，高于回测假设 {assumed:.4%}"
+        return None
 
     def _units(self, nav: Decimal) -> tuple[Decimal, Decimal]:
         repo, cfg = self.d.repo, self.cfg
@@ -739,13 +819,13 @@ class DailyRunner:
                 cost += f.commission * f.price
         traded = sum((f.quote_qty for f in fills), Decimal(0))
         lines.append(f"成交 {len(fills)} 笔，成交额 {traded:.2f} USDT，手续费约 {cost:.4f} USDT")
-        dust = sorted(
-            p.asset
-            for p in self.d.repo.list_positions(self.cfg.account_id, self.cfg.strategy_id, managed_only=True)
-            if p.dust and p.qty > 0
-        )
+        positions = self.d.repo.list_positions(self.cfg.account_id, self.cfg.strategy_id, managed_only=True)
+        dust = sorted(p.asset for p in positions if p.dust and p.qty > 0)
         if dust:
             lines.append("灰尘：" + "，".join(dust[:15]))
+        frozen = sorted(p.asset for p in positions if p.frozen)
+        if frozen:
+            lines.append("冻结（不可交易，恢复后卖出）：" + "，".join(frozen))
         unmanaged = sorted(a for a, b in balances.items() if a not in managed and a != QUOTE and b.total > 0)
         if unmanaged:
             lines.append("非受管资产：" + "，".join(unmanaged[:15]))

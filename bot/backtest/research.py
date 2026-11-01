@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import copy
 import csv
-import hashlib
 import itertools
 import json
 import subprocess
@@ -32,7 +31,7 @@ from bot.backtest import benchmarks as bm
 from bot.backtest import stats
 from bot.backtest.engine import BacktestResult, EngineOptions, rebalance_stats, run_backtest
 from bot.backtest.report import build_summary, write_report
-from bot.config import AppConfig
+from bot.config import AppConfig, config_hash
 from bot.strategy.indicators import MarketPanel
 from bot.strategy.momentum_v1 import MomentumV1
 
@@ -66,11 +65,6 @@ def apply_overrides(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> di
             node = node.setdefault(k, {})
         node[keys[-1]] = value
     return out
-
-
-def config_hash(cfg: AppConfig) -> str:
-    raw = json.dumps(cfg.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha1(raw.encode()).hexdigest()[:10]
 
 
 @dataclass
@@ -158,7 +152,10 @@ def run_experiment(
         cfg, res = ctx.run(v)
         bench = ctx.benchmarks(cfg, EngineOptions.from_config(cfg).cost)
         out_dir = reports_dir / exp_id / _safe(v.name)
-        summ = write_report(out_dir, f"{exp_id} {v.name}", res, bench, ctx.panel.close[cfg.regime.symbol])
+        summ = write_report(
+            out_dir, f"{exp_id} {v.name}", res, bench, ctx.panel.close[cfg.regime.symbol],
+            usdt_yield=cfg.backtest.usdt_yield_annual,
+        )  # fmt: skip
         rebal = rebalance_stats(res)
         sat = rebal[rebal["sleeve"] == "satellite"]
         row = {
@@ -274,5 +271,7 @@ def walk_forward(
     return (1 + stitched).cumprod(), pd.DataFrame(chosen)
 
 
-def summary_row(result: BacktestResult, benchmarks: dict[str, pd.Series]) -> dict[str, Any]:
-    return build_summary(result, benchmarks)
+def summary_row(
+    result: BacktestResult, benchmarks: dict[str, pd.Series], *, usdt_yield: float = 0.0
+) -> dict[str, Any]:
+    return build_summary(result, benchmarks, usdt_yield=usdt_yield)

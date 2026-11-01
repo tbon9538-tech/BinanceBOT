@@ -92,6 +92,7 @@ backtest:
   fee: 0.001
   slippage: 0.0005
   delist_haircut: 0.5         # 【待研究】
+  usdt_yield_annual: 0.04     # 只用于报告"扣除 USDT 理财收益"的参考夏普（spec §1.2），假设值，不影响交易与回测
   start: "2020-01-01"
   end: "2025-06-30"           # 必须早于 research.holdout_start
 

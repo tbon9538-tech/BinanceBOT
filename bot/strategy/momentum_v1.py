@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 
 import pandas as pd
@@ -41,11 +41,14 @@ class MomentumV1:
         panel: MarketPanel,
         *,
         asset_ok: Callable[[str], bool] = lambda col: True,
+        exclude_symbols: Collection[str] = (),
     ) -> None:
+        """exclude_symbols：在流动性排名阶段就排除的交易对（实盘传入 risk.force_exit_assets，spec §2.4）。"""
         self.cfg = cfg
         self.strategy_id = cfg.strategy_id
         self.panel = panel
         self.asset_ok = asset_ok
+        self._exclude = frozenset(exclude_symbols)
         rc = cfg.regime
         if rc.symbol not in panel.columns:
             raise ValueError(f"面板中没有大盘过滤标的 {rc.symbol}")
@@ -91,7 +94,11 @@ class MomentumV1:
     def universe(self, d: pd.Timestamp, exclude_symbols: tuple[str, ...]) -> list[str]:
         if d not in self._universe_cache:
             self._universe_cache[d] = rank_universe(
-                self.panel, d, self.cfg.universe, exclude_symbols=exclude_symbols, asset_ok=self.asset_ok
+                self.panel,
+                d,
+                self.cfg.universe,
+                exclude_symbols=set(exclude_symbols) | self._exclude,
+                asset_ok=self.asset_ok,
             )
         return self._universe_cache[d]
 
