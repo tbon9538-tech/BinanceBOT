@@ -10,15 +10,15 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from dotenv import load_dotenv
-from filelock import FileLock, Timeout
 
 from bot import paths
+from bot.app import ops
 from bot.app.daemon import run_daemon
-from bot.app.run_once import KILL_FILE, LOCK_FILE, QUOTE, DailyRunner, RunDeps, _prices_for, managed_assets
+from bot.app.run_once import KILL_FILE, QUOTE, DailyRunner, RunDeps, _prices_for, managed_assets
 from bot.config import AppConfig, load_assets
 from bot.data.store import MarketStore
 from bot.domain.errors import ConfigError
-from bot.domain.types import Env, SystemState
+from bot.domain.types import Env
 from bot.exchange.binance.client import BinanceHttpClient, RateLimitState
 from bot.exchange.binance.credentials import credentials_present, load_credentials
 from bot.exchange.binance.market_data import BinanceMarketData
@@ -35,7 +35,6 @@ log = logging.getLogger(__name__)
 EXIT_OK = 0
 EXIT_ERROR = 2
 EXIT_LIVE_REFUSED = 7
-KILL_LOCK_WAIT_SEC = 120.0
 LIVE_CONFIRM_TOKEN = "I_UNDERSTAND"
 
 
@@ -155,21 +154,11 @@ def cmd_status(cfg: AppConfig, args: argparse.Namespace) -> int:
 def cmd_kill(cfg: AppConfig, args: argparse.Namespace) -> int:
     """立即执行。有运行在进行时先写 KILL 文件，等它在下一笔订单前停下（最长 120 秒）（spec §5.5）。"""
     deps = build_deps(cfg, allow_live=cfg.env is Env.LIVE)
-    KILL_FILE.write_text(datetime.now(UTC).isoformat(), encoding="utf-8")
-    lock = FileLock(str(LOCK_FILE))
     try:
-        lock.acquire(timeout=KILL_LOCK_WAIT_SEC)
-    except Timeout:
-        print(
-            f"{KILL_LOCK_WAIT_SEC:.0f} 秒内拿不到进程锁；KILL 文件已保留，正在运行的进程会在下一笔订单前停止",
-            file=sys.stderr,
-        )
+        print(ops.kill(deps, reason="kill 命令"))
+    except ops.OpRefused as e:
+        print(e, file=sys.stderr)
         return EXIT_ERROR
-    try:
-        res = DailyRunner(deps).kill(reason="kill 命令")
-    finally:
-        lock.release()
-    print(f"已紧急停止：{res.status}")
     return EXIT_OK
 
 
@@ -178,28 +167,19 @@ def _repo(cfg: AppConfig) -> StateRepo:
 
 
 def cmd_pause(cfg: AppConfig, args: argparse.Namespace) -> int:
-    _repo(cfg).set_system_state(cfg.strategy_id, SystemState.PAUSED.value, reason="pause 命令")
-    print("已暂停：之后的运行只做快照和报告，不交易")
+    print(ops.pause(cfg, _repo(cfg), source="命令行"))
     return EXIT_OK
 
 
 def cmd_resume(cfg: AppConfig, args: argparse.Namespace) -> int:
-    repo = _repo(cfg)
-    st = repo.get_system_state(cfg.strategy_id)
-    state = SystemState(st.state) if st else SystemState.RUNNING
     if not args.confirm:
         print("恢复交易必须加 --confirm", file=sys.stderr)
         return EXIT_ERROR
-    if state is SystemState.KILLED and not args.after_kill:
-        print("系统处于 KILLED，恢复必须同时加 --after-kill", file=sys.stderr)
+    try:
+        print(ops.resume(cfg, _repo(cfg), KILL_FILE, after_kill=args.after_kill, source="命令行"))
+    except ops.OpRefused as e:
+        print(f"{e}（命令行加 --after-kill）" if "KILLED" in str(e) else e, file=sys.stderr)
         return EXIT_ERROR
-    if KILL_FILE.exists():
-        print("KILL 文件仍然存在，请先删除", file=sys.stderr)
-        return EXIT_ERROR
-    repo.set_system_state(
-        cfg.strategy_id, SystemState.RUNNING.value, reason=f"resume（原状态 {state.value}）"
-    )
-    print(f"已恢复：{state.value} → RUNNING")
     return EXIT_OK
 
 
@@ -219,10 +199,7 @@ def cmd_capital(cfg: AppConfig, args: argparse.Namespace) -> int:
         "fills_through": DailyRunner(deps)._fills_through(),
     }
     if args.acknowledge:
-        units, navu = DailyRunner(deps)._units(nav)
-        repo.append_nav_snapshot(strategy_id=cfg.strategy_id, account_id=cfg.account_id, kind="ACK", nav_usdt=nav,
-                                 units=units, nav_per_unit=navu, gross_exposure=Decimal(0), details=details)  # fmt: skip
-        print("已确认当前余额，作为下一次核对的基准")
+        print(ops.acknowledge(deps, note=args.note))
         return EXIT_OK
     try:
         amount = Decimal(args.deposit or args.withdraw)

@@ -21,7 +21,7 @@ def test_spec_subcommands_are_all_registered() -> None:
     # spec §11.1 列出的全部子命令
     expected = {
         "run", "backtest", "experiment", "walkforward", "bootstrap", "holdout", "dsr",
-        "kill", "pause", "resume", "status", "capital", "adopt", "assets", "data", "forward",
+        "kill", "pause", "resume", "status", "capital", "adopt", "assets", "data", "forward", "dashboard",
     }  # fmt: skip
     assert set(COMMANDS) == expected
 

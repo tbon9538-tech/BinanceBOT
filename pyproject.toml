@@ -15,6 +15,10 @@ dependencies = [
     "cryptography>=43",
     "matplotlib>=3.9",
     "filelock>=3.15",
+    "starlette>=0.40",
+    "uvicorn>=0.30",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
 ]
 
 [dependency-groups]
@@ -35,8 +39,10 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-# 单元测试禁止访问网络（pytest-socket），见 doc/DECISIONS.md D-023
-addopts = "-q --disable-socket"
+# 单元测试禁止访问网络（pytest-socket），见 doc/DECISIONS.md D-023；Unix 域套接字不出本机，asyncio 事件循环需要（D-075）
+addopts = "-q --disable-socket --allow-unix-socket"
+# starlette 1.x 提示 TestClient 改用 httpx2；目前仍兼容，等它真正移除时再换
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 
 [tool.ruff]
 line-length = 110

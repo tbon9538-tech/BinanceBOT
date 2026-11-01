@@ -1,18 +1,30 @@
-# 用法：docker compose up -d   （先复制 .env.example 为 .env 并填写 testnet / demo 的 Key）
+# 用法（先复制 .env.example 为 .env 并填写 testnet / demo 的 Key 与 DASHBOARD_PASSWORD）：
+#   docker compose up -d --build              常驻机器人 + 管理界面
+#   docker compose up -d --build dashboard    只启动管理界面（机器人暂停期间查看用，不会定时交易）
+x-common: &common
+  build: .
+  image: binance-bot:latest
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    # 紧急停止文件放在挂载的 data/ 下：在主机项目目录创建 data/KILL 即可生效（D-070）
+    BOT_KILL_FILE: /app/data/KILL
+  volumes:
+    - ./data:/app/data
+    - ./logs:/app/logs
+    - ./reports:/app/reports
+    - ./config:/app/config:ro
+    - ./doc/forward:/app/doc/forward   # 前向周报（python -m bot forward）写到主机
+
 services:
   bot:
-    build: .
-    image: binance-bot:latest
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      # 紧急停止文件放在挂载的 data/ 下：在主机项目目录创建 data/KILL 即可（D-070）
-      BOT_KILL_FILE: /app/data/KILL
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./reports:/app/reports
-      - ./config:/app/config:ro
-      - ./doc/forward:/app/doc/forward   # 前向周报（python -m bot forward）写到主机
+    <<: *common
     # 常驻模式：每天在 config.yaml 的 rebalance.run_time_utc 运行一次 run --once
     command: ["run", "--daemon"]
+
+  dashboard:
+    <<: *common
+    # 管理界面（D-075）。端口只映射到主机的 127.0.0.1；手机 / 其他电脑通过 Tailscale 访问（doc/deploy_cloud.md）
+    command: ["dashboard", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "127.0.0.1:8080:8080"

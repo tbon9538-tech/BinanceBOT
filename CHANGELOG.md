@@ -6,6 +6,8 @@
 ## [未发布]
 
 ### 新增
+- 管理界面 `python -m bot dashboard`：净值与回撤、大盘、实时持仓、目标权重、运行记录、事件、成交；可暂停、恢复、立即运行一次、确认余额、紧急停止。登录密码 `DASHBOARD_PASSWORD`，CSRF 与确认词保护，每次操作留审计事件；docker-compose 新增 `dashboard` 服务（只开放本机端口）（D-075）。
+- 云服务器部署说明 `doc/deploy_cloud.md`（Tailscale 访问）（D-076）。
 - 下单前检查 `MAX_POSITION` 过滤器：按整个账户（含外部基线）的持仓计算，超出上限的买单在下单前放弃（D-073）。
 - 过滤器不通过的订单写 WARN 日志与 `FILTER_REJECTED` 事件；日报的买单一行列出跳过原因计数（D-074）。
 - 日报在 `regime.mode: ensemble` 时显示集成仓位乘数。
@@ -16,6 +18,8 @@
 - `forward` 周报：`--since` 之后没有快照时不再报错；报告文件名按 UTC 日期。
 
 ### 变更
+- 暂停、恢复、紧急停止、确认余额的核心逻辑移到 `bot/app/ops.py`，命令行与管理界面共用。
+- pytest 允许 Unix 域套接字（`--allow-unix-socket`），网络访问仍然禁止。
 - `tests/test_run_once.py` 改用 `bot/backtest/sim_env.py` 的模拟环境，去掉重复的构造代码。
 
 ## [1.0.0] - 2026-11-02

@@ -7,7 +7,7 @@
 
 ## 1. 一句话现状
 
-币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（348 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。demo 前向观察 2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机（macOS），原电脑的容器已删除。**2026-11-01 17:06 UTC 起按用户要求暂停自动运行**（开发未完成），等用户说恢复再启动。
+币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（359 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。demo 前向观察 2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机（macOS），原电脑的容器已删除。**2026-11-01 17:06 UTC 起按用户要求暂停自动运行**（开发未完成），等用户说恢复再启动。
 
 | 项目 | 状态 |
 |---|---|
@@ -26,7 +26,7 @@
 3. `doc/ROADMAP.md`：**接下来怎么走**（阶段 A～D、研究线 R、功能线 F、阶段 2、用户决策点）。
 4. `doc/dev_plan.md`：开头的**进度表**、检查点 C0～C4、§4 防过拟合规则。
 5. `doc/open_questions.md`：顶部的**决策记录表**（Q0～Q14 都已决定，Q6 地区和 Q12 资金规模部分待定）。
-6. `doc/DECISIONS.md`（D-001～D-074）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
+6. `doc/DECISIONS.md`（D-001～D-076）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
 7. `doc/binance_momentum_bot_spec.md`：需求说明 v3；文末有"v3 修订"和"v3 实现阶段修订"两张表。
 8. `doc/research/log.md`：研究日志，包括全部预注册、结论，以及 E11 保留集和 R2 结果。
 9. `doc/testnet_log.md`、`doc/demo_log.md`：联调与前向观察记录。
@@ -57,6 +57,8 @@ docker compose exec bot uv run --no-sync python -m bot forward     # 前向周�
 docker compose exec bot uv run --no-sync python -m bot kill        # 紧急停止（或在主机创建 data/KILL）
 docker compose logs -f bot
 ```
+
+**管理界面**（D-075）：`docker compose up -d --build dashboard`（只启动界面，不会启动定时交易），浏览器打开 http://127.0.0.1:8080 ，用 `.env` 的 `DASHBOARD_PASSWORD` 登录（用户名任意）。界面能暂停、恢复、立即运行、紧急停止（清仓）。上云后通过 Tailscale 访问，见 `doc/deploy_cloud.md`。
 
 修改代码后要让容器生效：`docker compose up -d --build`。**暂停期间不要执行 `up -d`**（它会把容器重新启动并恢复每日运行），改完代码只跑检查即可，恢复时再 `up -d --build`；要看状态用 `docker compose run --rm bot status`（一次性容器，跑完即删，不会启动常驻模式）。
 
@@ -100,7 +102,8 @@ bot/exchange/binance/      HTTP/签名（先 percent-encode）、过滤器、Spo
 bot/execution/             订单计划（先卖后买）、执行器（write-ahead 意图、未知状态处理、对账）、clientOrderId
 bot/persistence/           state 库模型、仓库、迁移（v001 初始、v002 外部基线）
 bot/risk/                  NAV 份额、风控判定、ATR 止损（默认关闭）
-bot/app/                   run_once（每日流程）、account_view（外部基线视图）、daemon、运维命令、数据/研究/前向命令
+bot/app/                   run_once（每日流程）、account_view（外部基线视图）、daemon、ops（运维操作核心，命令行与界面共用）、
+                           运维命令、数据/研究/前向命令；dashboard/（管理界面：data 取数、charts 生成 SVG、server、templates）
 bot/notify/                Telegram（只发不收）、心跳
 scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演练）、replay_check.py（执行回放）
 ```
@@ -146,6 +149,11 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 3. ~~状态库自动备份~~：已完成（2026-11-02，D-072）。在本机真实 demo 库上验证：备份后恢复到独立目录，`status` 输出与原库一致。
 4. ~~代码异地备份~~：已推送到 https://github.com/tbon9538-tech/BinanceBOT （公开仓库，用户指定）。
 
+**P0.5：管理界面与上云（Q15，恢复 demo 之前）**
+
+- ~~管理界面~~：已完成（D-075）。
+- 上云（D-076）：等用户选服务商与地区（Q6）、创建服务器、注册 Tailscale；然后按 `doc/deploy_cloud.md` 部署并验证，再在云上恢复 demo 观察。**本机不再运行 bot 服务**。
+
 **P1：demo 观察与收尾**
 
 5. 每周运行 `forward` 周报，把结果追加到 `doc/demo_log.md` 的周表；满 4 周、对账无差错后到达检查点 C4，向用户汇报。
@@ -176,4 +184,4 @@ docker compose exec bot uv run --no-sync python -m bot status
 docker compose logs --tail 20 bot
 ```
 
-预期：348 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT，最后一行显示通知是否已配置和备份份数。
+预期：359 项测试通过；容器状态为 Up；`status` 显示 `环境 demo`、系统状态 RUNNING、受管资产 BTC/INJ/PEPE/USDT，最后一行显示通知是否已配置和备份份数。

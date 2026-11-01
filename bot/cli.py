@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from bot import paths
+from bot.app.dashboard.server import cmd_dashboard
 from bot.app.data_commands import cmd_assets, cmd_data
 from bot.app.forward_report import cmd_forward
 from bot.app.ops_commands import cmd_adopt, cmd_capital, cmd_kill, cmd_pause, cmd_resume, cmd_run, cmd_status
@@ -120,6 +121,11 @@ def _add_forward(p: argparse.ArgumentParser) -> None:
     p.add_argument("--since", default=None, help="只统计该日期之后，YYYY-MM-DD")
 
 
+def _add_dashboard(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--host", default="127.0.0.1", help="监听地址；容器内用 0.0.0.0，由端口映射限制为本机")
+    p.add_argument("--port", type=int, default=8080)
+
+
 def _no_args(p: argparse.ArgumentParser) -> None:
     pass
 
@@ -142,6 +148,7 @@ COMMANDS: dict[str, tuple[str, str, Callable[[argparse.ArgumentParser], None]]] 
     "assets": ("资产审核", "M1", _add_assets),
     "data": ("历史数据下载与缓存", "M1", _add_data),
     "forward": ("demo / live 前向运行周报（与研究引擎同期对比）", "Q14", _add_forward),
+    "dashboard": ("管理界面：浏览器查看状态并执行运维操作", "Q15", _add_dashboard),
 }
 
 
@@ -176,6 +183,7 @@ HANDLERS: dict[str, Handler] = {
     "capital": cmd_capital,
     "adopt": cmd_adopt,
     "forward": cmd_forward,
+    "dashboard": cmd_dashboard,
 }
 
 RESEARCH_COMMANDS = {"backtest", "experiment", "walkforward", "bootstrap"}

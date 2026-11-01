@@ -767,6 +767,24 @@ class StateRepo:
         with self._session() as s:
             return s.get(RegimeStateRow, (strategy_id, d))
 
+    def list_regime_states(self, strategy_id: str) -> list[RegimeStateRow]:
+        with self._session() as s:
+            q = select(RegimeStateRow).where(RegimeStateRow.strategy_id == strategy_id)
+            return sorted(s.scalars(q), key=lambda r: r.date)
+
+    # ---- 查询（管理界面用） ----
+
+    def list_runs(self, strategy_id: str, *, limit: int = 30) -> list[RunRow]:
+        """最近的运行，新的在前。"""
+        with self._session() as s:
+            rows = list(s.scalars(select(RunRow).where(RunRow.strategy_id == strategy_id)))
+        return sorted(rows, key=lambda r: (r.run_date, r.started_at), reverse=True)[:limit]
+
+    def latest_target_date(self, strategy_id: str) -> date | None:
+        with self._session() as s:
+            dates = s.scalars(select(DailyTargetRow.date).where(DailyTargetRow.strategy_id == strategy_id))
+            return max(dates, default=None)
+
 
 def fill_asset_delta(f: FillRow, asset: str) -> Decimal:
     """一笔成交对某个资产余额的影响：买入加 base、减 quote；卖出相反；手续费从对应资产扣除。"""

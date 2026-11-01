@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot 控制台 · {{ ov.env }}</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --fg: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+  --accent: #2563eb; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+  --on: rgba(21, 128, 61, .10); --dd: rgba(185, 28, 28, .14); --sma: #9ca3af;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1218; --card: #171b23; --fg: #e5e7eb; --muted: #9aa3b2; --line: #2a303b;
+    --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --on: rgba(74, 222, 128, .10); --dd: rgba(248, 113, 113, .18); --sma: #6b7280;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 4px 0 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+h2 { font-size: 16px; margin: 0 0 10px; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 0 0 14px; }
+.muted { color: var(--muted); }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; font-weight: 600; }
+.RUNNING, .DONE, .ok { color: var(--ok); }
+.PAUSED, .SKIPPED, .WARN, .DRY_RUN, .进行中 { color: var(--warn); }
+.HALTED, .KILLED, .FAILED, .CRITICAL, .bad, .失败, .拒绝 { color: var(--bad); }
+.alert { border-left: 4px solid var(--warn); padding: 8px 12px; margin: 0 0 10px; background: var(--card); border-radius: 6px; }
+.alert.bad { border-color: var(--bad); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.card .k { font-size: 12px; color: var(--muted); }
+.card .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.card .s { font-size: 12px; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+figure.chart { margin: 0; }
+figure.chart svg { width: 100%; height: 180px; display: block; }
+figure.chart figcaption { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+figure.chart figcaption span:nth-child(2) { text-align: center; }
+figure.chart figcaption span:first-child, figure.chart figcaption span:last-child { white-space: nowrap; }
+svg .line { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+svg .sma { fill: none; stroke: var(--sma); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+svg .dd { fill: var(--dd); stroke: none; }
+svg .on { fill: var(--on); }
+.bars { display: grid; gap: 6px; }
+.bar { display: grid; grid-template-columns: 92px 1fr 56px; gap: 8px; align-items: center; font-size: 13px; }
+.bar .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .track { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.bar .fill { display: block; height: 100%; background: var(--accent); }
+.bar .pct { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ops { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.ops form { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 8px; align-content: start; }
+.ops form.danger { border-color: var(--bad); }
+.ops .t { font-weight: 600; }
+.ops .d { font-size: 12px; color: var(--muted); }
+button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+input[type=text] { font: inherit; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; }
+label { font-size: 13px; display: flex; gap: 6px; align-items: flex-start; }
+footer { font-size: 12px; color: var(--muted); text-align: center; padding: 8px 0 24px; }
+</style>
+</head>
+<body>
+<main>
+<h1>
+  币安现货机器人
+  <span class="badge">{{ ov.env }}</span>
+  <span class="badge {{ ov.state }}">{{ ov.state }}</span>
+  <span class="muted" style="font-size:13px;font-weight:400">策略 {{ ov.strategy_id }} · {{ utc(ov.now) }}</span>
+</h1>
+
+{% if ov.kill_file %}<div class="alert bad">KILL 文件存在：常驻进程会执行紧急停止（撤单并清仓受管资产）。如果是误操作，在"操作"里删除它。</div>{% endif %}
+{% if ov.state in ("KILLED", "HALTED") %}<div class="alert bad">系统状态 {{ ov.state }}：{{ ov.state_reason or "" }}（{{ utc(ov.state_since) }}）</div>{% endif %}
+{% if ov.stale %}<div class="alert">超过 26 小时没有新的运行（最近一次：{{ ov.last_run.run_id if ov.last_run else "无" }}）。常驻进程可能没有在运行。</div>{% endif %}
+{% if live is string %}<div class="alert">实时余额获取失败：{{ live }}</div>{% endif %}
+
+<section>
+  <div class="cards">
+    <div class="card"><div class="k">净值（USDT）</div><div class="v">{{ "%.2f"|format(ov.nav) if ov.nav is not none else "—" }}</div>
+      <div class="s">资金上限 {{ ov.max_capital }} · 快照 {{ utc(ov.snapshot_time) }}</div></div>
+    <div class="card"><div class="k">单位净值</div><div class="v">{{ "%.4f"|format(ov.navu) if ov.navu is not none else "—" }}</div>
+      <div class="s">回撤 {{ "%.1f%%"|format(ov.drawdown * 100) if ov.drawdown is not none else "—" }}</div></div>
+    <div class="card"><div class="k">仓位</div><div class="v">{{ "%.0f%%"|format(ov.gross * 100) if ov.gross is not none else "—" }}</div>
+      <div class="s">占净值</div></div>
+    <div class="card"><div class="k">大盘</div>
+      <div class="v {{ 'ok' if ov.regime and ov.regime.risk_on else '' }}">{{ ("RISK_ON" if ov.regime.risk_on else "RISK_OFF") if ov.regime else "—" }}</div>
+      <div class="s">{% if ov.regime %}{{ ov.regime.day }} BTC {{ "{:,.0f}".format(ov.regime.close) }}{% if ov.regime.sma %} / 均线 {{ "{:,.0f}".format(ov.regime.sma) }}{% endif %}{% endif %}{% if regime_mode != "sma" %} · {{ regime_mode }}{% endif %}</div></div>
+    <div class="card"><div class="k">最近一次运行</div>
+      <div class="v {{ ov.last_run.status if ov.last_run else '' }}" style="font-size:16px">{{ ov.last_run.status if ov.last_run else "—" }}</div>
+      <div class="s">{{ ov.last_run.run_id if ov.last_run else "" }}</div></div>
+    <div class="card"><div class="k">下次定时运行（北京时间）</div><div class="v" style="font-size:16px">{{ bj(ov.next_run) }}</div>
+      <div class="s">{{ utc(ov.next_run) }}（需常驻进程在运行）</div></div>
+  </div>
+</section>
+
+<div class="grid2">
+  <section><h2>单位净值与回撤</h2>{{ nav_chart }}</section>
+  <section><h2>大盘：BTC 与均线 <span class="muted" style="font-weight:400;font-size:12px">近一年，按当前配置计算；绿色背景 = Risk-On</span></h2>{{ regime_chart }}</section>
+</div>
+
+<div class="grid2">
+  <section>
+    <h2>实时持仓 <span class="muted" style="font-weight:400;font-size:12px">交易所余额，60 秒缓存</span></h2>
+    {% if is_live_view %}
+      {{ live_bars }}
+      <div class="tbl" style="margin-top:10px"><table>
+        <tr><th>资产</th><th class="n">数量</th><th class="n">市值 USDT</th><th class="n">占净值</th></tr>
+        {% for a, q, v, w in live.rows %}<tr><td>{{ a }}</td><td class="n">{{ "%.8g"|format(q) }}</td><td class="n">{{ "%.2f"|format(v) }}</td><td class="n">{{ "%.1f%%"|format(w * 100) }}</td></tr>{% endfor %}
+        <tr><td>USDT</td><td class="n">{{ "%.2f"|format(live.usdt) }}</td><td class="n">{{ "%.2f"|format(live.usdt) }}</td><td></td></tr>
+      </table></div>
+      <p class="muted" style="font-size:12px">净值 {{ "%.2f"|format(live.nav) }} USDT · {{ utc(live.time) }}</p>
+    {% else %}
+      <p class="muted">暂时拿不到交易所余额。下面是状态库记录的受管持仓：</p>
+      <div class="tbl"><table><tr><th>资产</th><th class="n">数量</th><th>建仓日</th><th></th></tr>
+      {% for a, q, d, dust, frozen in ov.positions %}<tr><td>{{ a }}</td><td class="n">{{ q }}</td><td>{{ d or "" }}</td><td class="muted">{{ "灰尘" if dust else "" }}{{ " 冻结" if frozen else "" }}</td></tr>{% else %}<tr><td colspan="4" class="muted">无</td></tr>{% endfor %}
+      </table></div>
+    {% endif %}
+  </section>
+  <section>
+    <h2>目标权重 <span class="muted" style="font-weight:400;font-size:12px">{{ ov.targets_date or "" }}，占策略资金</span></h2>
+    {{ target_bars }}
+  </section>
+</div>
+
+<section id="ops">
+  <h2>操作</h2>
+  {% if busy %}<div class="alert">有操作正在后台执行，完成后刷新页面查看结果。</div>{% endif %}
+  <div class="ops">
+    <form method="post" action="/ops/pause">
+      <span class="t">暂停交易</span><span class="d">之后的运行只做快照和报告，不下单。不撤单、不清仓。</span>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit">暂停</button>
+    </form>
+    <form method="post" action="/ops/resume">
+      <span class="t">恢复交易</span><span class="d">把系统状态改回 RUNNING，下一次运行开始照常交易。</span>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if ov.state == "KILLED" %}<label><input type="checkbox" name="after_kill" value="1" required> 我知道系统已紧急停止并清仓，确认恢复</label>{% endif %}
+      <button type="submit" class="primary">恢复</button>
+    </form>
+    {% if allow_run %}
+    <form method="post" action="/ops/run">
+      <span class="t">立即运行一次</span><span class="d">与每天定时运行相同：更新行情、计算目标、按需下单。今天已经调过仓时只更新快照。</span>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label><input type="checkbox" name="confirm" value="1" required> 确认立即运行（会按策略下单）</label>
+      <button type="submit" {{ "disabled" if busy }}>运行</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/ops/ack">
+      <span class="t">确认当前余额</span><span class="d">出现"无法解释的余额变化"（例如 testnet 月度重置）时，把当前余额作为新的核对基准。</span>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="text" name="note" maxlength="200" placeholder="备注（可选）">
+      <label><input type="checkbox" name="confirm" value="1" required> 确认当前余额无误</label>
+      <button type="submit" {{ "disabled" if busy }}>确认余额</button>
+    </form>
+    <form method="post" action="/ops/kill" class="danger">
+      <span class="t bad">紧急停止</span><span class="d">撤销策略挂单、<b>卖出全部受管资产</b>，系统进入 KILLED。之后需要手动恢复。</span>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="text" name="confirm_text" required pattern="{{ kill_word }}" autocomplete="off" placeholder="输入 {{ kill_word }} 确认">
+      <button type="submit" class="danger" {{ "disabled" if busy }}>紧急停止并清仓</button>
+    </form>
+    {% if ov.kill_file %}
+    <form method="post" action="/ops/unkill">
+      <span class="t">删除 KILL 文件</span><span class="d">取消尚未执行的紧急停止。</span>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label><input type="checkbox" name="confirm" value="1" required> 确认取消紧急停止</label>
+      <button type="submit">删除</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if ops_log %}
+  <div class="tbl" style="margin-top:12px"><table>
+    <tr><th>时间</th><th>操作</th><th>结果</th><th>说明</th></tr>
+    {% for r in ops_log %}<tr><td>{{ utc(r.time) }}</td><td>{{ r.op }}</td><td class="{{ r.status }}">{{ r.status }}</td><td>{{ r.message }}</td></tr>{% endfor %}
+  </table></div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>运行记录</h2>
+  <div class="tbl"><table>
+    <tr><th>运行</th><th>状态</th><th>开始</th><th>结束</th><th>错误</th></tr>
+    {% for r in ov.runs %}<tr><td>{{ r.run_id }}</td><td class="{{ r.status }}">{{ r.status }}</td><td>{{ utc(r.started_at) }}</td><td>{{ utc(r.finished_at) }}</td><td>{{ r.error or "" }}</td></tr>{% else %}<tr><td colspan="5" class="muted">无</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section>
+  <h2>事件与告警 <span class="muted" style="font-weight:400;font-size:12px">最近 50 条</span></h2>
+  <div class="tbl"><table>
+    <tr><th>时间</th><th>级别</th><th>类型</th><th>内容</th></tr>
+    {% for e in ov.events %}<tr><td>{{ utc(e.time) }}</td><td class="{{ e.level }}">{{ e.level }}</td><td>{{ e.type }}</td><td>{{ event_summary(e) }}</td></tr>{% else %}<tr><td colspan="4" class="muted">无</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section>
+  <h2>成交 <span class="muted" style="font-weight:400;font-size:12px">最近 30 笔</span></h2>
+  <div class="tbl"><table>
+    <tr><th>时间</th><th>交易对</th><th>方向</th><th class="n">价格</th><th class="n">数量</th><th class="n">成交额</th><th class="n">手续费</th></tr>
+    {% for f in ov.fills %}<tr><td>{{ utc(f.time) }}</td><td>{{ f.symbol }}</td><td>{{ f.side }}</td><td class="n">{{ f.price }}</td><td class="n">{{ f.qty }}</td><td class="n">{{ "%.2f"|format(f.quote_qty) }}</td><td class="n">{{ f.commission }} {{ f.commission_asset }}</td></tr>{% else %}<tr><td colspan="7" class="muted">无</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section>
+  <h2>通知与备份</h2>
+  <p>Telegram <span class="{{ 'ok' if tg_ok else 'WARN' }}">{{ "已配置" if tg_ok else "未配置" }}</span> ·
+     心跳 <span class="{{ 'ok' if hb_ok else 'WARN' }}">{{ "已配置" if hb_ok else "未配置" }}</span> ·
+     {% if ov.backup_enabled %}状态库备份 {{ ov.backups|length }} 份{% if ov.backups %}（最近 {{ ov.backups[-1].name }}）{% endif %}{% else %}自动备份已关闭{% endif %}</p>
+</section>
+
+<footer>账户 {{ ov.account_id }} · 所有时间为 UTC（北京时间 = UTC + 8）· 刷新页面获取最新数据</footer>
+</main>
+</body>
+</html>
