@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -11,7 +12,7 @@ from typing import Any
 import httpx
 import pytest
 
-from bot.app.daemon import next_run_at, run_daemon
+from bot.app.daemon import alive_path, next_run_at, run_daemon
 from bot.app.run_once import DailyRunner, managed_assets
 from bot.backtest.sim_env import build_sim_deps, sim_config
 from bot.config import BackupConfig
@@ -119,6 +120,10 @@ def test_daemon_runs_daily_and_stops_on_kill(env) -> None:  # type: ignore[no-un
     assert next_run_at(clock.t, "00:10") == datetime(2026, 11, 2, 0, 10, tzinfo=UTC)
     run_daemon(DailyRunner(deps), "00:10", now=clock.now, sleep=clock.sleep, max_cycles=1)
     assert acct.placed  # 到点后执行了一次
+    alive = json.loads(alive_path(deps.lock_file).read_text(encoding="utf-8"))
+    assert alive["state"] == "running" and alive["next_run"].startswith(
+        "2026-11-02T00:10"
+    )  # 管理界面用（D-080）
     deps.kill_file.write_text("x")
     assert run_daemon(DailyRunner(deps), "00:10", now=clock.now, sleep=clock.sleep) == 0
     assert deps.repo.get_system_state("mom1").state == "KILLED"  # type: ignore[union-attr]

@@ -28,6 +28,32 @@ from bot.strategy.regime import regime_with_exposure
 BEIJING = timedelta(hours=8)
 REGIME_DAYS = 365
 STALE_AFTER = timedelta(hours=26)  # 超过这么久没有新的运行，页面上提示可能漏跑
+DAEMON_WAITING_FRESH = timedelta(minutes=3)  # 常驻进程每 60 秒写一次存活标记
+DAEMON_RUNNING_FRESH = timedelta(hours=3)  # 运行中不写标记；数据未就绪时最多重试约 30 分钟
+
+
+@dataclass(frozen=True)
+class DaemonStatus:
+    """常驻进程的状态，来自它写的存活标记 daemon.alive（D-080）。"""
+
+    alive: bool
+    state: str | None  # waiting / running；没有标记时为 None
+    seen: datetime | None
+    next_run: datetime | None
+
+
+def daemon_status(path: Path | None, now: datetime) -> DaemonStatus:
+    if path is None or not path.exists():
+        return DaemonStatus(False, None, None, None)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        seen = datetime.fromisoformat(raw["seen"])
+        state = str(raw["state"])
+        nxt = datetime.fromisoformat(raw["next_run"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return DaemonStatus(False, None, None, None)
+    fresh = DAEMON_RUNNING_FRESH if state == "running" else DAEMON_WAITING_FRESH
+    return DaemonStatus(now - seen <= fresh, state, seen, nxt)
 
 
 @dataclass(frozen=True)
@@ -75,6 +101,22 @@ class Overview:
     fills: list[FillRow]
     backups: list[Path] = field(default_factory=list)
     backup_enabled: bool = True
+    daemon: DaemonStatus = DaemonStatus(False, None, None, None)
+
+    @property
+    def navu_change(self) -> float | None:
+        """单位净值相对前一个快照日的变化。"""
+        h = self.nav_history
+        return h[-1].navu / h[-2].navu - 1 if len(h) >= 2 and h[-2].navu > 0 else None
+
+    @property
+    def max_drawdown(self) -> float | None:
+        return min((p.drawdown for p in self.nav_history), default=None)
+
+    @property
+    def btc_vs_sma(self) -> float | None:
+        r = self.regime
+        return r.close / r.sma - 1 if r is not None and r.sma else None
 
 
 def nav_history(repo: StateRepo, cfg: AppConfig) -> list[NavPoint]:
@@ -138,6 +180,7 @@ def build_overview(
     kill_file: Path,
     *,
     store: MarketStore | None = None,
+    alive_file: Path | None = None,
     now: datetime | None = None,
 ) -> Overview:
     now = now or datetime.now(UTC)
@@ -188,6 +231,7 @@ def build_overview(
         fills=sorted(repo.list_fills(sid, cfg.account_id), key=lambda f: f.time, reverse=True)[:30],
         backups=backups,
         backup_enabled=cfg.backup.enabled,
+        daemon=daemon_status(alive_file, now),
     )
 
 
@@ -199,3 +243,44 @@ def event_summary(e: EventRow, limit: int = 160) -> str:
         return e.payload_json[:limit]
     text = "；".join(f"{k}={v}" for k, v in payload.items()) if isinstance(payload, dict) else str(payload)
     return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+@dataclass(frozen=True)
+class HoldingRow:
+    asset: str
+    qty: float
+    value: float  # 市值（USDT）
+    actual: float  # 占策略资金
+    target: float  # 目标权重（占策略资金）
+
+
+def compare_holdings(
+    positions: list[tuple[str, float, float]],
+    targets: dict[str, dict[str, float]],
+    nav: float,
+    max_capital: float,
+    *,
+    quote: str = "USDT",
+) -> tuple[float, list[HoldingRow]]:
+    """目标与实际持仓对比，都按"占策略资金"计算（策略资金 = min(净值, 资金上限)，与每日流程一致）。
+
+    positions：(资产, 数量, 市值)。返回 (策略资金, 按 max(目标, 实际) 从大到小排列的行)。
+    """
+    capital = min(nav, max_capital)
+    want: dict[str, float] = {}
+    for sleeve in targets.values():
+        for sym, w in sleeve.items():
+            a = sym.removesuffix(quote)
+            want[a] = want.get(a, 0.0) + w
+    held = {a: (q, v) for a, q, v in positions}
+    rows = [
+        HoldingRow(
+            a,
+            held.get(a, (0.0, 0.0))[0],
+            held.get(a, (0.0, 0.0))[1],
+            held.get(a, (0.0, 0.0))[1] / capital if capital > 0 else 0.0,
+            want.get(a, 0.0),
+        )
+        for a in set(want) | set(held)
+    ]
+    return capital, sorted(rows, key=lambda r: (-max(r.target, r.actual), r.asset))

@@ -103,7 +103,7 @@ bot/execution/             订单计划（先卖后买）、执行器（write-ah
 bot/persistence/           state 库模型、仓库、迁移（v001 初始、v002 外部基线）
 bot/risk/                  NAV 份额、风控判定、ATR 止损（默认关闭）
 bot/app/                   run_once（每日流程）、account_view（外部基线视图）、daemon、ops（运维操作核心，命令行与界面共用）、
-                           运维命令、数据/研究/前向命令；dashboard/（管理界面：data 取数、charts 生成 SVG、server、templates）
+                           运维命令、数据/研究/前向命令；dashboard/（管理界面：data 取数、charts 静态 SVG 后备、server、templates、static/app.js·app.css，D-080）
 bot/notify/                Telegram（只发不收）、心跳
 scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演练）、replay_check.py（执行回放）
 ```

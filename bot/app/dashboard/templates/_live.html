@@ -1,0 +1,37 @@
+{% if is_live_view %}
+{%- set top = [holdings|map(attribute="actual")|max if holdings else 0, holdings|map(attribute="target")|max if holdings else 0, 0.0001]|max -%}
+<div class="legend" style="margin-bottom:12px"><span><i class="key-line"></i>实际</span><span><i class="key-line s2"></i>目标</span></div>
+<div class="holdings">
+  {% for r in holdings %}
+  <div class="hrow" title="{{ r.asset }}：实际 {{ '%.1f%%'|format(r.actual * 100) }}，目标 {{ '%.1f%%'|format(r.target * 100) }}，市值 {{ '%.2f'|format(r.value) }} USDT">
+    <span class="name">{{ r.asset }}</span>
+    <span class="hbars" aria-hidden="true">
+      <span class="hbar s1 {{ 'zero' if r.actual <= 0 }}" style="width:{{ '%.1f'|format(100 * r.actual / top) }}%"></span>
+      <span class="hbar s2 {{ 'zero' if r.target <= 0 }}" style="width:{{ '%.1f'|format(100 * r.target / top) }}%"></span>
+    </span>
+    <span class="vals"><b>{{ "%.1f%%"|format(r.actual * 100) }}</b>目标 {{ "%.1f%%"|format(r.target * 100) }}</span>
+  </div>
+  {% else %}<p class="empty">没有持仓，也没有目标权重。</p>{% endfor %}
+</div>
+<div class="facts">
+  <div class="fact"><div class="k">账户净值</div><div class="v num">{{ "{:,.2f}".format(live.nav) }}</div></div>
+  <div class="fact"><div class="k">策略资金 = min(净值, 上限)</div><div class="v num">{{ "{:,.2f}".format(capital) }}</div></div>
+  <div class="fact"><div class="k">策略外闲置 USDT</div><div class="v num">{{ "{:,.2f}".format(idle) }}</div></div>
+  <div class="fact"><div class="k">USDT 余额</div><div class="v num">{{ "{:,.2f}".format(live.usdt) }}</div></div>
+</div>
+<details class="table-view">
+  <summary>查看明细</summary>
+  <div class="tbl" style="margin-top:8px"><table>
+    <thead><tr><th>资产</th><th class="n">数量</th><th class="n">市值 USDT</th><th class="n">实际</th><th class="n">目标</th><th class="n">偏差</th></tr></thead>
+    <tbody>{% for r in holdings %}<tr><td>{{ r.asset }}</td><td class="n">{{ "%.8g"|format(r.qty) }}</td><td class="n">{{ "{:,.2f}".format(r.value) }}</td><td class="n">{{ "%.1f%%"|format(r.actual * 100) }}</td><td class="n">{{ "%.1f%%"|format(r.target * 100) }}</td><td class="n">{{ "%+.1f%%"|format((r.actual - r.target) * 100) }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</details>
+<p class="muted" style="font-size:12px;margin:10px 0 0">交易所实时余额 · {{ utc(live.time) }} · 60 秒内重复打开使用缓存</p>
+{% else %}
+<div class="alert"><svg class="ico"><use href="#i-warn"/></svg><div class="body"><b>暂时读不到交易所余额</b>{{ live }}</div></div>
+<p class="muted" style="margin:12px 0 6px">状态库记录的受管持仓：</p>
+<div class="tbl"><table>
+  <thead><tr><th>资产</th><th class="n">数量</th><th>建仓日</th><th></th></tr></thead>
+  <tbody>{% for a, q, d, dust, frozen in ov.positions %}<tr><td>{{ a }}</td><td class="n">{{ q }}</td><td>{{ d or "" }}</td><td class="muted">{{ "灰尘" if dust else "" }}{{ " 冻结" if frozen else "" }}</td></tr>{% else %}<tr><td colspan="4" class="muted">无</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}

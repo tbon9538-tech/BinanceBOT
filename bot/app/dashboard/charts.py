@@ -1,8 +1,8 @@
-"""服务端生成的 SVG 小图（不依赖任何前端库或外部 CDN）。
+"""服务端生成的 SVG 静态图：不开脚本时的后备，也是 app.js 交互图的初始画面（D-080）。
 
-颜色用 CSS 类（见模板中的样式），随浅色 / 深色模式变化；图形按容器宽度拉伸，
-坐标文字放在图下方的 HTML 里（拉伸 SVG 会让其中的文字变形）。
-返回值都是 markupsafe.Markup，模板中直接输出；所有数值都由本模块格式化，不含用户输入。
+每张图只有一个纵轴：单位净值与回撤分成两张图。颜色用 CSS 类（见 static/app.css），随浅色 / 深色模式变化；
+图形按容器宽度拉伸，坐标文字放在图下方的 HTML 里（拉伸 SVG 会让其中的文字变形）。
+返回值都是 markupsafe.Markup；所有数值都由本模块格式化，不含用户输入。
 """
 
 from __future__ import annotations
@@ -14,11 +14,12 @@ from markupsafe import Markup
 
 from bot.app.dashboard.data import NavPoint, RegimePoint
 
-W, H = 640, 200
-PAD_L, PAD_R, PAD_T, PAD_B = 4, 4, 8, 8
+W, H = 640, 180
+PAD = 6
 
 
 def _scale(lo: float, hi: float, top: float, bottom: float) -> tuple[float, float]:
+    """返回 (k, b)，y = b - v * k 把 [lo, hi] 映射到 [bottom, top]。"""
     if hi <= lo:
         hi, lo = lo + 1e-9, lo - 1e-9
     k = (bottom - top) / (hi - lo)
@@ -37,70 +38,69 @@ def _path(xs: Sequence[float], ys: Sequence[float | None]) -> str:
     return " ".join(parts)
 
 
-def _frame(body: str, label: str, first: date, last: date, note: str) -> Markup:
+def _xs(n: int) -> list[float]:
+    span = W - 2 * PAD
+    return [PAD + (span * i / (n - 1) if n > 1 else span / 2) for i in range(n)]
+
+
+def _frame(body: str, label: str, h: int, first: date, last: date, note: str) -> Markup:
     return Markup(
-        f'<figure class="chart"><svg viewBox="0 0 {W} {H}" role="img" aria-label="{label}" '
-        f'preserveAspectRatio="none">{body}</svg>'
-        f"<figcaption><span>{first.isoformat()}</span><span>{note}</span><span>{last.isoformat()}</span>"
-        "</figcaption></figure>"
+        f'<svg class="static-chart" viewBox="0 0 {W} {h}" role="img" aria-label="{label}" '
+        f'preserveAspectRatio="none" style="height:{h}px">{body}</svg>'
+        f'<div class="axis-row"><span>{first.isoformat()}</span><span>{note}</span>'
+        f"<span>{last.isoformat()}</span></div>"
     )
 
 
-def _xs(n: int) -> list[float]:
-    span = W - PAD_L - PAD_R
-    return [PAD_L + (span * i / (n - 1) if n > 1 else span / 2) for i in range(n)]
+def _empty(text: str) -> Markup:
+    return Markup(f'<p class="empty">{text}</p>')
 
 
 def nav_chart(points: Sequence[NavPoint]) -> Markup:
-    """单位净值折线；回撤用浅色面积画在同一张图的下部。"""
     if not points:
-        return Markup('<p class="muted">还没有净值快照。</p>')
+        return _empty("还没有净值快照。")
     xs = _xs(len(points))
     vals = [p.navu for p in points]
     lo, hi = min(vals), max(vals)
-    k, b = _scale(lo, hi, PAD_T, H - PAD_B - 40)
-    line = _path(xs, [b - v * k for v in vals])
+    k, b = _scale(lo, hi, PAD, H - PAD)
     if len(points) == 1:  # 只有一个点：画一条水平线
-        line = f"M{PAD_L},{b - vals[0] * k:.1f} L{W - PAD_R},{b - vals[0] * k:.1f}"
-    dd_lo = min(min(p.drawdown for p in points), -1e-9)
-    dk, db = _scale(dd_lo, 0.0, H - PAD_B - 34, H - PAD_B)
-    dd = _path(xs, [db - p.drawdown * dk for p in points])
-    base = db
-    area = f"{dd} L{xs[-1]:.1f},{base:.1f} L{xs[0]:.1f},{base:.1f} Z" if len(points) > 1 else ""
-    body = f'<path class="dd" d="{area}"/>' if area else ""
-    body += f'<path class="line" d="{line}"/>'
-    note = f"区间 {lo:.4f} ～ {hi:.4f} · 最大回撤 {min(p.drawdown for p in points):.1%}"
-    return _frame(body, "单位净值与回撤", points[0].day, points[-1].day, note)
+        y = b - vals[0] * k
+        line = f"M{PAD},{y:.1f} L{W - PAD},{y:.1f}"
+    else:
+        line = _path(xs, [b - v * k for v in vals])
+    body = f'<path class="s1" d="{line}"/>'
+    return _frame(body, "单位净值", H, points[0].day, points[-1].day, f"{lo:.4f} ～ {hi:.4f}")
+
+
+def drawdown_chart(points: Sequence[NavPoint]) -> Markup:
+    if not points:
+        return Markup("")
+    h = 72
+    xs = _xs(len(points))
+    lo = min(min(p.drawdown for p in points), -1e-9)
+    k, b = _scale(lo, 0.0, PAD, h - PAD)
+    line = _path(xs, [b - p.drawdown * k for p in points])
+    area = f"{line} L{xs[-1]:.1f},{b:.1f} L{xs[0]:.1f},{b:.1f} Z" if len(points) > 1 else ""
+    body = (f'<path class="dd-area" d="{area}"/>' if area else "") + f'<path class="dd" d="{line}"/>'
+    note = f"最大回撤 {lo:.1%}" if lo < -1e-6 else "无回撤"
+    return _frame(body, "回撤", h, points[0].day, points[-1].day, note)
 
 
 def regime_chart(points: Sequence[RegimePoint]) -> Markup:
-    """BTC 收盘价与均线；Risk-On 的日子用浅色背景标出。"""
+    """BTC 收盘价（系列 1）与均线（系列 2）；Risk-On 的日子用浅色背景标出。"""
     if not points:
-        return Markup('<p class="muted">还没有大盘状态记录（第一次运行后出现）。</p>')
+        return _empty("还没有大盘数据（第一次运行或同步行情后出现）。")
     xs = _xs(len(points))
     vals = [p.close for p in points] + [p.sma for p in points if p.sma is not None]
     lo, hi = min(vals), max(vals)
-    k, b = _scale(lo, hi, PAD_T, H - PAD_B)
-    step = (W - PAD_L - PAD_R) / max(len(points) - 1, 1)
+    k, b = _scale(lo, hi, PAD, H - PAD)
+    step = (W - 2 * PAD) / max(len(points) - 1, 1)
     bands = "".join(
-        f'<rect class="on" x="{x - step / 2:.1f}" y="{PAD_T}" width="{step:.2f}" height="{H - PAD_T - PAD_B}"/>'
+        f'<rect class="band-on" x="{x - step / 2:.1f}" y="0" width="{step + 0.5:.2f}" height="{H}"/>'
         for x, p in zip(xs, points, strict=True)
         if p.risk_on
     )
     close = _path(xs, [b - p.close * k for p in points])
     sma = _path(xs, [b - p.sma * k if p.sma is not None else None for p in points])
-    body = f'{bands}<path class="sma" d="{sma}"/><path class="line" d="{close}"/>'
-    return _frame(body, "BTC 收盘价与均线", points[0].day, points[-1].day, f"区间 {lo:,.0f} ～ {hi:,.0f}")
-
-
-def weight_bars(weights: Sequence[tuple[str, float]], *, total: float | None = None) -> Markup:
-    """横向条形图：名称、比例条、百分比。total 为 None 时按最大值归一。"""
-    if not weights:
-        return Markup('<p class="muted">无</p>')
-    top = total if total else max(w for _, w in weights) or 1.0
-    rows = "".join(
-        f'<div class="bar"><span class="name">{Markup.escape(name)}</span><span class="track"><span class="fill" '
-        f'style="width:{max(0.0, min(100.0, 100 * w / top)):.1f}%"></span></span><span class="pct">{w:.1%}</span></div>'
-        for name, w in weights
-    )
-    return Markup(f'<div class="bars">{rows}</div>')
+    body = f'{bands}<path class="s2" d="{sma}"/><path class="s1" d="{close}"/>'
+    return _frame(body, "BTC 收盘价与均线", H, points[0].day, points[-1].day, f"{lo:,.0f} ～ {hi:,.0f}")

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import json
+import re
 import threading
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -73,28 +76,83 @@ def test_login_required(env) -> None:  # type: ignore[no-untyped-def]
     assert anon.get("/", headers={"authorization": "Basic !!!"}).status_code == 401
 
 
-def test_page_shows_status_charts_and_live_positions(env) -> None:  # type: ignore[no-untyped-def]
+def test_page_shows_status_and_charts(env) -> None:  # type: ignore[no-untyped-def]
     *_, client = env
     r = client.get("/")
     assert r.status_code == 200
     html = r.text
-    assert "RUNNING" in html and "mom1:2026-11-02" in html
-    assert html.count("<svg") >= 1 and "单位净值与回撤" in html
-    assert "实时持仓" in html and "BTC" in html and "实时余额获取失败" not in html
-    assert (
-        r.headers["x-frame-options"] == "DENY"
-        and "frame-ancestors 'none'" in r.headers["content-security-policy"]
+    assert "状态正常" in html and "mom1:2026-11-02" in html and "单位净值" in html
+    csp = r.headers["content-security-policy"]
+    assert r.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in csp
+    assert "script-src 'self'" in csp and "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
+    # 只有同源脚本文件和不执行的 JSON 数据块；没有内联脚本，也没有外部资源（D-080）
+    scripts = re.findall(r"<script([^>]*)>", html)
+    assert sorted(scripts) == sorted(
+        [' src="/static/app.js" defer', ' type="application/json" id="chart-data"']
     )
-    assert "<script" not in html  # 页面不含任何脚本
+    assert "http://" not in html.replace("http://testserver", "") and "https://" not in html
+    data = json.loads(re.search(r'id="chart-data">(.*?)</script>', html, re.S).group(1))  # type: ignore[union-attr]
+    assert len(data["regime"]) == 365 and data["nav"][-1][0] == "2026-11-02"
+    assert 'id="live-slot" data-src="/partials/live"' in html  # 实时持仓由脚本异步加载
 
 
-def test_live_failure_still_renders_page(env) -> None:  # type: ignore[no-untyped-def]
+def test_live_partial_compares_target_and_actual(env) -> None:  # type: ignore[no-untyped-def]
+    *_, client = env
+    html = client.get("/partials/live").text
+    assert "BTC" in html and "目标" in html and "策略资金 = min(净值, 上限)" in html
+    assert "暂时读不到交易所余额" not in html
+    inline = client.get("/?live=1").text  # 不开脚本时的后备
+    assert 'data-loaded="1"' in inline and "策略资金 = min(净值, 上限)" in inline
+
+
+def test_compare_holdings_uses_strategy_capital() -> None:
+    from bot.app.dashboard.data import compare_holdings
+
+    capital, rows = compare_holdings(
+        [("BTC", 0.003, 236.0), ("PEPE", 8e6, 41.5)],
+        {"core": {"BTCUSDT": 0.475}, "satellite": {"PEPEUSDT": 0.084, "TRXUSDT": 0.017}},
+        nav=5000.0,
+        max_capital=500.0,
+    )
+    assert capital == 500.0
+    by = {r.asset: r for r in rows}
+    assert by["BTC"].actual == pytest.approx(0.472) and by["BTC"].target == 0.475
+    assert by["TRX"].actual == 0 and by["TRX"].target == 0.017  # 有目标、还没持有
+    assert [r.asset for r in rows] == ["BTC", "PEPE", "TRX"]
+
+
+def test_live_failure_still_renders(env) -> None:  # type: ignore[no-untyped-def]
     dash, *_ = env
     dash._deps_factory = lambda: (_ for _ in ()).throw(RuntimeError("no key"))  # type: ignore[assignment]
     dash._deps = None
-    html = TestClient(create_app(dash), headers=_auth()).get("/").text
-    assert "实时余额获取失败：RuntimeError: no key" in html
+    client = TestClient(create_app(dash), headers=_auth())
+    assert client.get("/").status_code == 200  # 主页面不等交易所
+    html = client.get("/partials/live").text
+    assert "暂时读不到交易所余额" in html and "RuntimeError: no key" in html
     assert "状态库记录的受管持仓" in html
+
+
+def test_static_files_need_login(env) -> None:  # type: ignore[no-untyped-def]
+    dash, *_, client = env
+    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/app.css").status_code == 200
+    assert TestClient(create_app(dash)).get("/static/app.js").status_code == 401
+
+
+def test_daemon_status_from_alive_marker(env, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    dash, *_, client = env
+    assert "定时运行没有在进行" in client.get("/").text  # 没有存活标记
+    alive = tmp_path / "daemon.alive"
+    now = dash.now()
+    alive.write_text(
+        json.dumps({"seen": now.isoformat(), "state": "waiting", "next_run": "2026-11-03T00:10:00+00:00"})
+    )
+    dash.alive_file = alive
+    html = client.get("/").text
+    assert "定时运行没有在进行" not in html and "等待中" in html and "11-03 08:10" in html
+    stale = now - timedelta(minutes=10)
+    alive.write_text(json.dumps({"seen": stale.isoformat(), "state": "waiting", "next_run": now.isoformat()}))
+    assert "定时运行没有在进行" in client.get("/").text
 
 
 def test_operations_need_csrf_and_same_origin(env) -> None:  # type: ignore[no-untyped-def]
@@ -110,7 +168,12 @@ def test_operations_need_csrf_and_same_origin(env) -> None:  # type: ignore[no-u
 def test_pause_resume_are_audited(env) -> None:  # type: ignore[no-untyped-def]
     dash, deps, _, client = env
     r = _post(client, dash, "pause")
-    assert r.status_code == 303 and r.headers["location"] == "/#ops"
+    assert r.status_code == 303 and r.headers["location"] == "/?op=1#ops"
+    page = client.get("/?op=1").text
+    assert 'id="toast"' in page and "已暂停" in page  # 操作结果提示
+    assert 'id="toast"' not in client.get("/").text
+    status = client.get("/api/ops").json()
+    assert status["busy"] is False and status["log"][0]["op"] == "暂停"
     assert deps.repo.get_system_state("mom1").state == SystemState.PAUSED.value  # type: ignore[union-attr]
     _post(client, dash, "resume")
     st = deps.repo.get_system_state("mom1")
