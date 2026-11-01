@@ -48,6 +48,7 @@ class OrderStatus(StrEnum):
     """交易所订单状态。"""
 
     NEW = "NEW"
+    PENDING_NEW = "PENDING_NEW"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
     FILLED = "FILLED"
     CANCELED = "CANCELED"
@@ -55,6 +56,22 @@ class OrderStatus(StrEnum):
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
     EXPIRED_IN_MATCH = "EXPIRED_IN_MATCH"
+
+    @property
+    def is_final(self) -> bool:
+        """订单已结束（不会再有新的成交）。"""
+        return self in _FINAL_ORDER_STATUSES
+
+
+_FINAL_ORDER_STATUSES = frozenset(
+    {
+        OrderStatus.FILLED,
+        OrderStatus.CANCELED,
+        OrderStatus.REJECTED,
+        OrderStatus.EXPIRED,
+        OrderStatus.EXPIRED_IN_MATCH,
+    }
+)
 
 
 class IntentStatus(StrEnum):
@@ -77,6 +94,7 @@ class SymbolStatus(StrEnum):
     HALT = "HALT"
     BREAK = "BREAK"
     CANCEL_ONLY = "CANCEL_ONLY"
+    UNKNOWN = "UNKNOWN"  # 交易所返回了文档之外的状态：一律按不可交易处理
 
 
 class Regime(StrEnum):
@@ -120,10 +138,11 @@ class SymbolRules:
     ask_multiplier_up: Decimal | None = None
     ask_multiplier_down: Decimal | None = None
     avg_price_mins: int | None = None
+    spot_allowed: bool = True  # exchangeInfo.isSpotTradingAllowed
 
     @property
     def is_trading(self) -> bool:
-        return self.status is SymbolStatus.TRADING
+        return self.status is SymbolStatus.TRADING and self.spot_allowed
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +205,29 @@ class OrderResult:
     fills: tuple[Fill, ...] = ()
     expiry_reason: str | None = None
     raw: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class CommissionRates:
+    """账户在某个交易对上的实际费率（GET /api/v3/account/commission）。
+
+    standard / tax / special 各含 maker、taker、buyer、seller 四项；
+    按官方 FAQ，一笔成交的费率 = Σ(三类) 的 (maker 或 taker) + (buyer 或 seller)。
+    """
+
+    symbol: str
+    standard: Mapping[str, Decimal]
+    tax: Mapping[str, Decimal] = field(default_factory=dict)
+    special: Mapping[str, Decimal] = field(default_factory=dict)
+    discount_enabled: bool = False  # BNB 抵扣（v1 关闭，D-009）
+
+    def rate(self, side: Side, *, maker: bool = False) -> Decimal:
+        role = "maker" if maker else "taker"
+        side_key = "buyer" if side is Side.BUY else "seller"
+        total = Decimal(0)
+        for part in (self.standard, self.tax, self.special):
+            total += part.get(role, Decimal(0)) + part.get(side_key, Decimal(0))
+        return total
 
 
 @dataclass(frozen=True, slots=True)

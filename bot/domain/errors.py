@@ -30,6 +30,10 @@ class RateLimitedError(BotError):
         self.retry_after_sec = retry_after_sec
 
 
+class ExchangeUnavailableError(BotError):
+    """网络错误或交易所 5xx，重试后仍失败（只用于查询类请求，或下单请求尚未发出之前）。"""
+
+
 class UnknownOrderStatus(BotError):
     """下单超时、网络中断、5xx 或 -1007：订单执行状态未知（spec §6.6）。
 

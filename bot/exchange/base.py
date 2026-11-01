@@ -16,6 +16,7 @@ import pandas as pd
 from bot.domain.types import (
     AccountType,
     Balance,
+    CommissionRates,
     Fill,
     FuturesOrderRequest,
     FuturesPosition,
@@ -46,7 +47,15 @@ class SpotAccount(Protocol):
 
     def get_balances(self) -> dict[str, Balance]: ...
 
-    def get_rules(self, symbol: str) -> SymbolRules: ...
+    def get_rules(self, symbol: str) -> SymbolRules:
+        """交易对不存在时抛出 ExchangeError（-1121）。"""
+        ...
+
+    def get_all_rules(self) -> Mapping[str, SymbolRules]:
+        """执行环境中全部交易对的规则（含不可交易的；用 SymbolRules.is_trading 判断）。"""
+        ...
+
+    def get_commission_rates(self, symbol: str) -> CommissionRates: ...
 
     def get_book_ticker(self, symbol: str) -> tuple[Decimal, Decimal]:
         """返回 (bid, ask)。"""
@@ -57,14 +66,20 @@ class SpotAccount(Protocol):
     def get_prices(self, symbols: list[str]) -> dict[str, Decimal]: ...
 
     def place_order(self, req: OrderRequest) -> OrderResult:
-        """超时、网络中断、5xx、-1007 时抛出 UnknownOrderStatus（spec §6.6）。"""
+        """超时、网络中断、5xx、-1006/-1007 时抛出 UnknownOrderStatus（spec §6.6）。
+
+        交易所明确拒绝（4xx 业务错误）抛出 ExchangeError；请求尚未发出就失败时抛出
+        ExchangeUnavailableError 或 RateLimitedError（订单肯定没有发出）。
+        """
         ...
 
     def get_order(self, symbol: str, client_order_id: str) -> OrderResult | None:
-        """订单不存在（-2013）时返回 None。"""
+        """订单不存在（-2013）时返回 None。网络错误重试后仍失败抛出 ExchangeUnavailableError。"""
         ...
 
-    def cancel_order(self, symbol: str, client_order_id: str) -> OrderResult: ...
+    def cancel_order(self, symbol: str, client_order_id: str) -> OrderResult:
+        """不自动重试；执行状态未知时抛出 UnknownOrderStatus。"""
+        ...
 
     def get_open_orders(self, symbol: str) -> list[OrderResult]: ...
 
