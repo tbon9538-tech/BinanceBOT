@@ -29,7 +29,11 @@ class MarketDataSource(Protocol):
     """live 只读公共行情（data-api.binance.vision），不需要密钥。"""
 
     def get_daily_klines(self, symbol: str, start: date, end: date) -> pd.DataFrame:
-        """返回 [start, end] 内**已收盘**的日线，按日期升序。"""
+        """返回 [start, end] 内**已收盘**的日线，按日期升序。
+
+        格式为 raw frame（列见 bot.data.klines.KLINE_COLUMNS）：价格与数量是交易所给出的十进制字符串，
+        需要计算时用 bot.data.klines.to_float_frame 转换。
+        """
         ...
 
     def get_exchange_info(self) -> Mapping[str, Any]: ...

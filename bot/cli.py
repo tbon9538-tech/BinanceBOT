@@ -1,22 +1,30 @@
 """命令行入口：`python -m bot <子命令>`。
 
-M0 阶段只有骨架：每个子命令先加载并校验配置，然后提示尚未实现（退出码 3）。
+每个子命令先加载并校验配置。已实现的子命令见 HANDLERS；其余提示尚未实现（退出码 3）。
 各子命令的实现里程碑见 doc/dev_plan.md。
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Callable, Sequence
+from datetime import UTC, date, datetime
 from pathlib import Path
 
-from bot.config import load_config
-from bot.domain.errors import ConfigError
+from bot import paths
+from bot.app.data_commands import cmd_assets, cmd_data
+from bot.config import AppConfig, load_config
+from bot.data.holdout import HoldoutGuard, HoldoutLog, HoldoutViolation
+from bot.domain.errors import ConfigError, RateLimitedError
 
 EXIT_OK = 0
 EXIT_CONFIG_ERROR = 1
 EXIT_NOT_IMPLEMENTED = 3
+EXIT_PARTIAL_FAILURE = 4
+EXIT_HOLDOUT_VIOLATION = 5
+EXIT_RATE_LIMITED = 6
 
 DEFAULT_CONFIG = Path("config/config.yaml")
 
@@ -82,12 +90,19 @@ def _add_adopt(p: argparse.ArgumentParser) -> None:
 
 
 def _add_assets(p: argparse.ArgumentParser) -> None:
-    p.add_argument("action", choices=["review"], help="review：列出待审核资产")
+    p.add_argument("action", choices=["review"], help="review：列出待审核资产，生成审核清单与草稿")
+    p.add_argument("--as-of", default=None, help="数据截止日 YYYY-MM-DD，默认最近一根已收盘日线")
+    p.add_argument("--db", default=str(paths.MARKET_DB))
+    p.add_argument("--out-dir", default=str(paths.ASSETS_REVIEW_DIR))
 
 
 def _add_data(p: argparse.ArgumentParser) -> None:
-    p.add_argument("action", choices=["sync"], help="sync：下载并缓存历史日线")
+    p.add_argument("action", choices=["sync", "report"], help="sync：下载并缓存历史日线；report：覆盖情况")
     p.add_argument("--since", default="2018-01-01")
+    p.add_argument("--symbols", default=None, help="只同步这些交易对，逗号分隔")
+    p.add_argument("--workers", type=int, default=8, help="并发下载数（上限 8）")
+    p.add_argument("--db", default=str(paths.MARKET_DB))
+    p.add_argument("--raw-dir", default=str(paths.RAW_DIR))
 
 
 def _no_args(p: argparse.ArgumentParser) -> None:
@@ -126,13 +141,56 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+Handler = Callable[[AppConfig, argparse.Namespace], int]
+
+HANDLERS: dict[str, Handler] = {
+    "data": cmd_data,
+    "assets": cmd_assets,
+}
+
+RESEARCH_COMMANDS = {"backtest", "experiment", "walkforward", "bootstrap"}
+
+
+def _holdout_checks(cfg: AppConfig, args: argparse.Namespace) -> None:
+    """保留集守卫（spec §3.6）：研究命令的 --end 不得落入保留集；holdout 命令必须满足启动条件。"""
+    guard = HoldoutGuard(cfg.research.holdout_start)
+    if args.command in RESEARCH_COMMANDS and getattr(args, "end", None):
+        guard.check_end(date.fromisoformat(args.end))
+    if args.command == "holdout":
+        HoldoutLog().authorize(
+            final=args.final,
+            confirm=date.fromisoformat(args.confirm) if args.confirm else None,
+            today=datetime.now(UTC).date(),
+            not_first_run=args.i_know_this_is_not_the_first_run,
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        load_config(args.config)
+        cfg = load_config(args.config)
     except ConfigError as e:
         print(str(e), file=sys.stderr)
         return EXIT_CONFIG_ERROR
-    _, milestone, _ = COMMANDS[args.command]
-    print(f"配置有效。子命令 {args.command!r} 尚未实现，计划在 {milestone} 实现。", file=sys.stderr)
-    return EXIT_NOT_IMPLEMENTED
+    logging.basicConfig(
+        level=cfg.logging.level, format="%(asctime)s %(levelname)s %(name)s: %(message)s", stream=sys.stderr
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # 不逐条记录请求
+    try:
+        _holdout_checks(cfg, args)
+    except HoldoutViolation as e:
+        print(f"保留集守卫：{e}", file=sys.stderr)
+        return EXIT_HOLDOUT_VIOLATION
+    handler = HANDLERS.get(args.command)
+    if handler is None:
+        _, milestone, _ = COMMANDS[args.command]
+        print(f"配置有效。子命令 {args.command!r} 尚未实现，计划在 {milestone} 实现。", file=sys.stderr)
+        return EXIT_NOT_IMPLEMENTED
+    try:
+        return handler(cfg, args)
+    except ConfigError as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    except RateLimitedError as e:
+        print(f"被限频：{e}。已停止发送请求，请稍后再试（spec §3.5）", file=sys.stderr)
+        return EXIT_RATE_LIMITED

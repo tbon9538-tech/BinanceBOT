@@ -14,7 +14,17 @@
 
 ## 当前进度
 
-- M0（项目骨架）已完成，等待检查点 C0 确认。**C0 确认之前不开始 M1 / M5。**
+- M0（项目骨架）已完成，C0 已确认。
+- M1（数据层）已完成：行情客户端、vision 下载、market.db、交易段、保留集守卫、资产审核。
+- 下一步：M2（策略纯函数与研究引擎）。资产审核草稿 `doc/assets_review/assets.draft.yaml` 等待用户审核后，由用户（或经用户明确同意）写入 `config/assets.yaml`。
+
+数据命令：
+
+```bash
+uv run python -m bot data sync            # 增量同步全部 USDT 交易对日线（含已下架），写入 data/market.db
+uv run python -m bot data report          # 各年份覆盖情况
+uv run python -m bot assets review        # 生成资产审核清单与草稿（doc/assets_review/）
+```
 
 ## 常用命令（在项目根目录执行）
 
