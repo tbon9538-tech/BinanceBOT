@@ -23,13 +23,14 @@
 
 1. `CLAUDE.md`：项目约定、常用命令、硬性约束。
 2. `README.md`：使用说明（安装、研究、testnet/demo、Docker、运维、监控、上线清单）。
-3. `doc/dev_plan.md`：开头的**进度表**、检查点 C0～C4、§4 防过拟合规则。
-4. `doc/open_questions.md`：顶部的**决策记录表**（Q0～Q14 都已决定，Q6 地区和 Q12 资金规模部分待定）。
-5. `doc/DECISIONS.md`（D-001～D-070）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
-6. `doc/binance_momentum_bot_spec.md`：需求说明 v3；文末有"v3 修订"和"v3 实现阶段修订"两张表。
-7. `doc/research/log.md`：研究日志，包括全部预注册、结论，以及 E11 保留集和 R2 结果。
-8. `doc/testnet_log.md`、`doc/demo_log.md`：联调与前向观察记录。
-9. 背景（需要时再看）：`doc/strategy_review.md`（v2 评审、币安接口核对）、`doc/strategy_research.md`（研究方案）。
+3. `doc/ROADMAP.md`：**接下来怎么走**（阶段 A～D、研究线 R、功能线 F、阶段 2、用户决策点）。
+4. `doc/dev_plan.md`：开头的**进度表**、检查点 C0～C4、§4 防过拟合规则。
+5. `doc/open_questions.md`：顶部的**决策记录表**（Q0～Q14 都已决定，Q6 地区和 Q12 资金规模部分待定）。
+6. `doc/DECISIONS.md`（D-001～D-070）与 `doc/decisions_m5.md`（M5-D01～D47，执行层细节）。
+7. `doc/binance_momentum_bot_spec.md`：需求说明 v3；文末有"v3 修订"和"v3 实现阶段修订"两张表。
+8. `doc/research/log.md`：研究日志，包括全部预注册、结论，以及 E11 保留集和 R2 结果。
+9. `doc/testnet_log.md`、`doc/demo_log.md`：联调与前向观察记录。
+10. 背景（需要时再看）：`doc/strategy_review.md`（v2 评审、币安接口核对）、`doc/strategy_research.md`（研究方案）。
 
 ---
 
@@ -126,6 +127,8 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 ---
 
 ## 8. 待办（按优先级）
+
+> 完整路线图（阶段、退出条件、依赖、用户决策点）见 `doc/ROADMAP.md`；本节是其中近期部分的摘要。
 
 **P0：监控与数据安全（目前没有任何告警）**
 
