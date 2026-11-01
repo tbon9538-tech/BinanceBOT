@@ -76,7 +76,7 @@ docker compose logs -f bot
 - demo：5000 USDT + 5000 USDC 虚拟资金。USDC 记为外部基线；策略资金上限 500 USDT；已持有少量 BTC、INJ、PEPE。
 - testnet：预置了大量资产，全部记为外部基线；kill 演练后策略持仓为空，系统状态 RUNNING。
 
-从 GitHub 克隆接手时：克隆下来的只有代码和文档，`.env` 和 `data/` 都不在仓库里。
+从 GitHub 克隆接手时：克隆下来的只有代码和文档，`.env` 和 `data/` 都不在仓库里。2026-11-02 已验证：全新克隆后 `uv sync` + `check.ps1` 全部通过（ruff、mypy、335 项测试），不依赖任何未入库的文件；保留集守卫读取的 `doc/research/holdout_runs.log` 和试验记录 `trials.csv` 都在仓库里。
 
 - **只做开发**（推荐）：`git clone` 后执行 `uv sync` 和检查即可，单元测试不需要 `.env` 和 `data/`。demo 容器继续在原来那台电脑上运行；代码推到 GitHub 后，在那台电脑上 `git pull` 再 `docker compose up -d --build`。
 - **要在新电脑上运行 demo**：从原来那台电脑复制 `.env`（或按 `.env.example` 重新填写）和 `data/state-demo.db`；行情库可以复制 `data/market.db`，也可以用 `python -m bot data sync` 重新下载。**同一时间只能有一处运行容器**：先在旧电脑执行 `docker compose down`，再在新电脑执行 `docker compose up -d --build`，否则两处会对同一个 demo 账户重复下单。不带 `state-demo.db` 直接启动，账户里已有的 BTC/INJ/PEPE 会被当成外部资产，与旧的状态库对不上。
