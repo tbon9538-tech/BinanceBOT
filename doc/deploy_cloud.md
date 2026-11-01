@@ -14,7 +14,7 @@
 | 服务器规格 | 1 vCPU、1～2 GB 内存、20 GB 磁盘足够（每天运行几分钟）；系统选 Ubuntu 24.04 LTS |
 | SSH 密钥 | 创建服务器时只用密钥登录，不用密码 |
 | Tailscale 账号 | 免费个人版即可；服务器、笔记本、手机都登录同一个账号 |
-| 管理界面密码 | 写进服务器上的 `.env`：`DASHBOARD_PASSWORD=`（至少 12 位，用密码管理器生成） |
+| 管理界面账号 | 写进服务器上的 `.env`：`DASHBOARD_USERNAME`（默认 admin）、`DASHBOARD_PASSWORD`（demo 至少 8 位；**上实盘前换成至少 12 位的强密码**，否则界面拒绝启动，D-078） |
 
 ## 1. 服务器基础设置
 
@@ -75,7 +75,7 @@ sudo tailscale serve --bg 8080                     # 只在 Tailscale 网络内�
 tailscale serve status                             # 显示访问地址 https://<机器名>.<tailnet>.ts.net
 ```
 
-在手机或笔记本（已登录 Tailscale）上打开这个地址，用 `DASHBOARD_PASSWORD` 登录（用户名任意）。
+在手机或笔记本（已登录 Tailscale）上打开这个地址，用 `.env` 里的 `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` 登录。
 
 ## 6. 验证（全部通过才算迁移完成）
 

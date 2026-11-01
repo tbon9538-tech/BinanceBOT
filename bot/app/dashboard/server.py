@@ -1,8 +1,8 @@
 """管理界面（D-075）：`python -m bot dashboard`，浏览器查看运行状态并执行运维操作。
 
 安全设计：
-- 整个站点要求 HTTP Basic 登录，密码来自 .env 的 DASHBOARD_PASSWORD（至少 12 位；用户名任意）；
-  没有密码拒绝启动。登录失败等待 1 秒再返回。
+- 整个站点要求 HTTP Basic 登录：用户名 DASHBOARD_USERNAME（默认 admin）、密码 DASHBOARD_PASSWORD（.env）。
+  密码至少 8 位，live 环境至少 12 位（D-078）；不满足时拒绝启动。登录失败等待 1 秒再返回。
 - 只监听本机地址；远程访问通过 Tailscale 等私有网络转发（不直接暴露到公网）。
 - 所有操作都是 POST，带 CSRF 令牌并检查 Origin；kill 需要输入确认词 KILL，其余有副作用的操作需要勾选确认。
 - 每次操作写入 DASHBOARD_OP 事件，留下审计记录。
@@ -53,8 +53,11 @@ from bot.risk import ledger
 
 log = logging.getLogger(__name__)
 
+USERNAME_ENV = "DASHBOARD_USERNAME"
 PASSWORD_ENV = "DASHBOARD_PASSWORD"
-MIN_PASSWORD_LEN = 12
+DEFAULT_USERNAME = "admin"
+MIN_PASSWORD_LEN = 8
+MIN_PASSWORD_LEN_LIVE = 12  # 界面能清仓：实盘时不接受短密码
 KILL_WORD = "KILL"
 LIVE_CACHE_SEC = 60.0
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -95,11 +98,12 @@ class Dashboard:
         password: str,
         kill_file: Path,
         deps_factory: Callable[[], RunDeps],
+        username: str = DEFAULT_USERNAME,
         store: MarketStore | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.cfg, self.repo, self.kill_file, self.store = cfg, repo, kill_file, store
-        self.password = password
+        self.username, self.password = username, password
         self.csrf = hmac.new(password.encode(), b"dashboard-csrf", hashlib.sha256).hexdigest()
         self._deps_factory = deps_factory
         self._deps: RunDeps | None = None
@@ -192,15 +196,18 @@ class Dashboard:
 # ---- 请求处理 ----
 
 
-def _authorized(header: str | None, password: str) -> bool:
+def _authorized(header: str | None, username: str, password: str) -> bool:
     if not header or not header.startswith("Basic "):
         return False
     try:
         decoded = base64.b64decode(header[6:], validate=True).decode("utf-8")
     except (binascii.Error, UnicodeDecodeError):
         return False
-    _, sep, given = decoded.partition(":")
-    return bool(sep) and hmac.compare_digest(given.encode(), password.encode())
+    user, sep, given = decoded.partition(":")
+    # 两项都比较完再合并结果，不因用户名先错而提前返回
+    user_ok = hmac.compare_digest(user.encode(), username.encode())
+    pw_ok = hmac.compare_digest(given.encode(), password.encode())
+    return bool(sep) and user_ok and pw_ok
 
 
 def _same_origin(request: Request) -> bool:
@@ -211,10 +218,10 @@ def _same_origin(request: Request) -> bool:
 
 
 def _auth_middleware(
-    password: str,
+    username: str, password: str
 ) -> Callable[[Request, Callable[[Request], Awaitable[Response]]], Awaitable[Response]]:
     async def dispatch(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if not _authorized(request.headers.get("authorization"), password):
+        if not _authorized(request.headers.get("authorization"), username, password):
             await asyncio.sleep(1.0)
             resp: Response = PlainTextResponse(
                 "需要登录",
@@ -297,7 +304,7 @@ def create_app(dash: Dashboard) -> Starlette:
 
     return Starlette(
         routes=[Route("/", index), Route("/ops/{name}", op, methods=["POST"])],
-        middleware=[Middleware(BaseHTTPMiddleware, dispatch=_auth_middleware(dash.password))],
+        middleware=[Middleware(BaseHTTPMiddleware, dispatch=_auth_middleware(dash.username, dash.password))],
     )
 
 
@@ -323,11 +330,16 @@ def _remove_kill_file(kill_file: Path) -> str:
 # ---- 命令行入口 ----
 
 
-def load_password() -> str:
+def load_login(env: Env) -> tuple[str, str]:
+    """从环境变量读取登录用户名与密码；密码不满足长度要求时拒绝启动（D-078）。"""
+    username = os.environ.get(USERNAME_ENV, "").strip() or DEFAULT_USERNAME
     pw = os.environ.get(PASSWORD_ENV, "")
-    if len(pw) < MIN_PASSWORD_LEN:
-        raise ConfigError(f"请在 .env 中设置 {PASSWORD_ENV}（至少 {MIN_PASSWORD_LEN} 位），管理界面才能启动")
-    return pw
+    need = MIN_PASSWORD_LEN_LIVE if env is Env.LIVE else MIN_PASSWORD_LEN
+    if len(pw) < need:
+        raise ConfigError(
+            f"请在 .env 中设置 {PASSWORD_ENV}（{env.value} 环境至少 {need} 位），管理界面才能启动"
+        )
+    return username, pw
 
 
 def cmd_dashboard(cfg: AppConfig, args: argparse.Namespace) -> int:
@@ -339,10 +351,12 @@ def cmd_dashboard(cfg: AppConfig, args: argparse.Namespace) -> int:
 
     load_dotenv(Path(".env"), override=False)
     setup_logging(cfg.logging.level, Path(cfg.logging.dir), cfg.logging.retention_days)
+    username, password = load_login(cfg.env)
     dash = Dashboard(
         cfg,
         StateRepo.open(paths.state_db(cfg.env.value)),
-        password=load_password(),
+        username=username,
+        password=password,
         kill_file=KILL_FILE,
         deps_factory=lambda: build_deps(cfg, allow_live=cfg.env is Env.LIVE),
         store=MarketStore(paths.MARKET_DB),

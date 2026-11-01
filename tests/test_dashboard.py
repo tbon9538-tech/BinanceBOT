@@ -11,18 +11,18 @@ import pytest
 from starlette.testclient import TestClient
 
 from bot.app.dashboard import server
-from bot.app.dashboard.server import Dashboard, create_app, load_password
+from bot.app.dashboard.server import Dashboard, create_app, load_login
 from bot.app.run_once import DailyRunner
 from bot.backtest.sim_env import build_sim_deps, sim_config
 from bot.domain.errors import ConfigError
-from bot.domain.types import Side, SystemState
+from bot.domain.types import Env, Side, SystemState
 
 PASSWORD = "correct-horse-battery"
 ORIGIN = {"origin": "http://testserver"}
 
 
-def _auth(pw: str = PASSWORD) -> dict[str, str]:
-    return {"authorization": "Basic " + base64.b64encode(f"admin:{pw}".encode()).decode()}
+def _auth(pw: str = PASSWORD, user: str = "admin") -> dict[str, str]:
+    return {"authorization": "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()}
 
 
 @pytest.fixture
@@ -67,6 +67,8 @@ def test_login_required(env) -> None:  # type: ignore[no-untyped-def]
     r = anon.get("/")
     assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic")
     assert anon.get("/", headers=_auth("wrong-password-123")).status_code == 401
+    assert anon.get("/", headers=_auth(user="root")).status_code == 401  # 密码对、用户名错
+    assert anon.get("/", headers=_auth()).status_code == 200
     assert anon.post("/ops/pause", data={"csrf": dash.csrf}, headers=ORIGIN).status_code == 401
     assert anon.get("/", headers={"authorization": "Basic !!!"}).status_code == 401
 
@@ -168,15 +170,21 @@ def test_only_one_background_operation_at_a_time(env) -> None:  # type: ignore[n
     assert [r.status for r in dash.log if r.op == "慢操作"] == ["完成"]
 
 
-def test_password_policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DASHBOARD_PASSWORD", "short")
+def test_login_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DASHBOARD_USERNAME", raising=False)
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "short12")  # 7 位
     with pytest.raises(ConfigError):
-        load_password()
+        load_login(Env.DEMO)
     monkeypatch.delenv("DASHBOARD_PASSWORD")
     with pytest.raises(ConfigError):
-        load_password()
+        load_login(Env.DEMO)
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "8chars!!")
+    assert load_login(Env.DEMO) == ("admin", "8chars!!")  # 默认用户名 admin；demo / testnet 至少 8 位
+    with pytest.raises(ConfigError, match="至少 12 位"):
+        load_login(Env.LIVE)  # live 至少 12 位
     monkeypatch.setenv("DASHBOARD_PASSWORD", PASSWORD)
-    assert load_password() == PASSWORD
+    monkeypatch.setenv("DASHBOARD_USERNAME", " ops ")
+    assert load_login(Env.LIVE) == ("ops", PASSWORD)
 
 
 def test_regime_chart_uses_market_history(env) -> None:  # type: ignore[no-untyped-def]

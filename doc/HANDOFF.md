@@ -58,7 +58,7 @@ docker compose exec bot uv run --no-sync python -m bot kill        # 紧急停�
 docker compose logs -f bot
 ```
 
-**管理界面**（D-075）：`docker compose up -d --build dashboard`（只启动界面，不会启动定时交易），浏览器打开 http://127.0.0.1:8080 ，用 `.env` 的 `DASHBOARD_PASSWORD` 登录（用户名任意）。界面能暂停、恢复、立即运行、紧急停止（清仓）。上云后通过 Tailscale 访问，见 `doc/deploy_cloud.md`。
+**管理界面**（D-075）：`docker compose up -d --build dashboard`（只启动界面，不会启动定时交易），浏览器打开 http://127.0.0.1:8080 ，用 `.env` 的 `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` 登录（live 时密码必须至少 12 位，D-078）。界面能暂停、恢复、立即运行、紧急停止（清仓）。上云后通过 Tailscale 访问，见 `doc/deploy_cloud.md`。
 
 修改代码后要让容器生效：`docker compose up -d --build`。**暂停期间不要执行 `up -d`**（它会把容器重新启动并恢复每日运行），改完代码只跑检查即可，恢复时再 `up -d --build`；要看状态用 `docker compose run --rm bot status`（一次性容器，跑完即删，不会启动常驻模式）。
 

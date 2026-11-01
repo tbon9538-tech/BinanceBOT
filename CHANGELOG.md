@@ -21,6 +21,7 @@
 - `forward` 周报：`--since` 之后没有快照时不再报错；报告文件名按 UTC 日期。
 
 ### 变更
+- 管理界面登录校验用户名（`DASHBOARD_USERNAME`，默认 admin）；密码最短 demo / testnet 8 位、live 12 位（D-078）。
 - 暂停、恢复、紧急停止、确认余额的核心逻辑移到 `bot/app/ops.py`，命令行与管理界面共用。
 - pytest 允许 Unix 域套接字（`--allow-unix-socket`），网络访问仍然禁止。
 - `tests/test_run_once.py` 改用 `bot/backtest/sim_env.py` 的模拟环境，去掉重复的构造代码。
