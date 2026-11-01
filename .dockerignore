@@ -12,3 +12,4 @@ tests
 .ruff_cache
 .pytest_cache
 .hypothesis
+dist
