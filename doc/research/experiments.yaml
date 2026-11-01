@@ -255,3 +255,25 @@ R3b:
   title: 对照组：当前配置（ret_over_vol）的回看期邻域 14 / 21 / 28
   grid:
     sleeves.satellite.momentum_lookback: [14, 21, 28]
+
+# ---- R4：核心袖子扩展为 BTC + ETH，各自做趋势过滤（预注册见 doc/research/log.md "R4 预注册"）----
+R4a:
+  title: 核心 BTC + ETH（风险等分，各自 SMA 过滤；主方案 = SMA100 / 2%）；ETH 移出卫星
+  hypothesis: 核心分散到两个资产、各自过滤后，在不同过滤周期间稳定，且不低于只用 BTC 的同类设定
+  criteria: 见研究日志 R4 预注册第 1～4 条
+  base:
+    sleeves.core.symbols: [BTCUSDT, ETHUSDT]
+    sleeves.satellite.exclude_symbols: [BTCUSDT, ETHUSDT]
+  variants:
+    - {name: own75, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 75, sleeves.core.asset_buffer: 0.02}}
+    - {name: own100, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 100, sleeves.core.asset_buffer: 0.02}}
+    - {name: own150, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 150, sleeves.core.asset_buffer: 0.02}}
+    - {name: none, overrides: {sleeves.core.asset_filter: none}}
+    - {name: own100_cost_x2, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 100, sleeves.core.asset_buffer: 0.02}, engine: {fee: 0.002, slippage: 0.001}}
+
+R4b:
+  title: 对照组：核心只用 BTC（当前配置），同样的单资产 SMA 过滤 75 / 100 / 150
+  variants:
+    - {name: own75, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 75, sleeves.core.asset_buffer: 0.02}}
+    - {name: own100, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 100, sleeves.core.asset_buffer: 0.02}}
+    - {name: own150, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 150, sleeves.core.asset_buffer: 0.02}}
