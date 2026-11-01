@@ -92,7 +92,7 @@ def build_deps(cfg: AppConfig, *, allow_live: bool = False) -> RunDeps:
         account=account,
         market=market,
         store=MarketStore(paths.MARKET_DB),
-        repo=StateRepo.open(paths.STATE_DB),
+        repo=StateRepo.open(paths.state_db(cfg.env.value)),
         notifier=TelegramNotifier(enabled=cfg.notify.telegram_enabled),
     )
 
@@ -161,7 +161,7 @@ def cmd_kill(cfg: AppConfig, args: argparse.Namespace) -> int:
 
 
 def _repo(cfg: AppConfig) -> StateRepo:
-    return StateRepo.open(paths.STATE_DB)
+    return StateRepo.open(paths.state_db(cfg.env.value))
 
 
 def cmd_pause(cfg: AppConfig, args: argparse.Namespace) -> int:

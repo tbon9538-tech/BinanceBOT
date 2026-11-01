@@ -23,3 +23,6 @@ doc/research/scratch/out/explore_curves.csv
 
 # Claude Code 本地目录（子任务工作树等）
 .claude/
+
+# 部署包（含 Docker 镜像，体积大，不进 git）
+/dist/

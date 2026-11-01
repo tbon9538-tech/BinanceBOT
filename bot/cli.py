@@ -15,6 +15,7 @@ from pathlib import Path
 
 from bot import paths
 from bot.app.data_commands import cmd_assets, cmd_data
+from bot.app.forward_report import cmd_forward
 from bot.app.ops_commands import cmd_adopt, cmd_capital, cmd_kill, cmd_pause, cmd_resume, cmd_run, cmd_status
 from bot.app.research_commands import (
     cmd_backtest,
@@ -115,6 +116,10 @@ def _add_data(p: argparse.ArgumentParser) -> None:
     p.add_argument("--raw-dir", default=str(paths.RAW_DIR))
 
 
+def _add_forward(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--since", default=None, help="只统计该日期之后，YYYY-MM-DD")
+
+
 def _no_args(p: argparse.ArgumentParser) -> None:
     pass
 
@@ -136,6 +141,7 @@ COMMANDS: dict[str, tuple[str, str, Callable[[argparse.ArgumentParser], None]]] 
     "adopt": ("把账户中已有的资产纳入受管", "M6", _add_adopt),
     "assets": ("资产审核", "M1", _add_assets),
     "data": ("历史数据下载与缓存", "M1", _add_data),
+    "forward": ("demo / live 前向运行周报（与研究引擎同期对比）", "Q14", _add_forward),
 }
 
 
@@ -169,6 +175,7 @@ HANDLERS: dict[str, Handler] = {
     "resume": cmd_resume,
     "capital": cmd_capital,
     "adopt": cmd_adopt,
+    "forward": cmd_forward,
 }
 
 RESEARCH_COMMANDS = {"backtest", "experiment", "walkforward", "bootstrap"}

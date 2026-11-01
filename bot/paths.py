@@ -6,3 +6,8 @@ MARKET_DB = Path("data/market.db")
 STATE_DB = Path("data/state.db")
 RAW_DIR = Path("data/raw")
 ASSETS_REVIEW_DIR = Path("doc/assets_review")
+
+
+def state_db(env: str) -> Path:
+    """每个环境一个状态库（D-067）：testnet、demo、live 的持仓、基线、快照互不混用。"""
+    return Path(f"data/state-{env}.db")
