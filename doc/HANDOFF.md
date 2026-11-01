@@ -11,7 +11,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 代码仓库 | `E:\projects1101\BinanceBOT`，分支 `master`（提交历史见 `git log`），**没有远端仓库、没有 tag** |
+| 代码仓库 | `E:\projects1101\BinanceBOT`，分支 `master`，远端 `origin` = https://github.com/tbon9538-tech/BinanceBOT （**公开仓库**），没有 tag |
 | 运行中 | Docker 容器 `binancebot-bot-1`（`docker compose up -d`，`run --daemon`），每天 00:10 UTC 运行一次，`env: demo` |
 | 未提交改动 | 无（`.dockerignore` 排除 `dist` 已经用户同意并提交） |
 | 研究 | E0～E11 完成；保留集**已运行过一次，不得再运行**；R2（多周期均线集成）未通过；试验累计 121 个 |
@@ -76,7 +76,12 @@ docker compose logs -f bot
 - demo：5000 USDT + 5000 USDC 虚拟资金。USDC 记为外部基线；策略资金上限 500 USDT；已持有少量 BTC、INJ、PEPE。
 - testnet：预置了大量资产，全部记为外部基线；kill 演练后策略持仓为空，系统状态 RUNNING。
 
-换电脑接手时：`.env` 和 `data/`（尤其是 `state-demo.db`）都不在 git 中，要把整个项目目录复制过去。**同一时间只能有一处运行容器**：先在旧电脑执行 `docker compose down`，再在新电脑执行 `docker compose up -d --build`，否则两处会对同一个 demo 账户重复下单。
+从 GitHub 克隆接手时：克隆下来的只有代码和文档，`.env` 和 `data/` 都不在仓库里。
+
+- **只做开发**（推荐）：`git clone` 后执行 `uv sync` 和检查即可，单元测试不需要 `.env` 和 `data/`。demo 容器继续在原来那台电脑上运行；代码推到 GitHub 后，在那台电脑上 `git pull` 再 `docker compose up -d --build`。
+- **要在新电脑上运行 demo**：从原来那台电脑复制 `.env`（或按 `.env.example` 重新填写）和 `data/state-demo.db`；行情库可以复制 `data/market.db`，也可以用 `python -m bot data sync` 重新下载。**同一时间只能有一处运行容器**：先在旧电脑执行 `docker compose down`，再在新电脑执行 `docker compose up -d --build`，否则两处会对同一个 demo 账户重复下单。不带 `state-demo.db` 直接启动，账户里已有的 BTC/INJ/PEPE 会被当成外部资产，与旧的状态库对不上。
+
+仓库是**公开**的：推送前确认没有 Key、`.env`、`data/` 混进提交（2026-11-01 推送前已扫描全部历史，没有发现 Key；`tests/test_signing.py` 中的 64 位字符串是币安文档里公开的示例 Key）。
 
 ---
 
@@ -137,7 +142,7 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 1. 配置 Telegram：需要用户提供 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`，写入 `.env`。
 2. 配置心跳：需要用户在 healthchecks.io 创建检查，把 `https://hc-ping.com/<uuid>` 填入 `notify.heartbeat_url`。
 3. 状态库自动备份：建议每次运行成功后，把 `data/state-<env>.db` 用 SQLite backup API 复制到 `data/backup/`，保留 30 份。尚未实现。
-4. 代码异地备份：目前没有远端仓库，需要问用户是否建私有仓库。
+4. ~~代码异地备份~~：已推送到 https://github.com/tbon9538-tech/BinanceBOT （公开仓库，用户指定）。
 
 **P1：demo 观察与收尾**
 

@@ -34,7 +34,7 @@
 | A1 Telegram 通知 | 用户提供 token 与 chat_id → 开发配置 | `.env`：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` | 手动触发一次日报与一次 WARN 告警，手机都能收到 |
 | A2 外部心跳 | 用户在 healthchecks.io 建检查 → 开发配置 | `notify.heartbeat_url`（`https://hc-ping.com/<uuid>`） | 停掉容器后，在约定周期内收到心跳服务的告警 |
 | A3 状态库自动备份 | 开发 | 每次运行成功后，用 SQLite backup API 复制 `data/state-<env>.db` 到 `data/backup/`，保留 30 份 | 单元测试覆盖；从备份恢复后 `status` 结果一致 |
-| A4 代码异地备份 | 用户决定 → 开发 | 私有远端仓库（例如 GitHub private） | `git push` 成功；`.env`、`data/` 不在仓库中 |
+| ~~A4 代码异地备份~~ | — | https://github.com/tbon9538-tech/BinanceBOT （公开，用户指定） | 已完成（2026-11-01）：推送成功；推送前扫描全部历史，没有 Key、`.env`、`data/` |
 | A5 轮换密钥 | 用户 | testnet 与 demo 后台 | 两套 Key 都重新生成，`.env` 已更新，容器重启后 `status` 正常 |
 
 ### B demo 前向观察（进行中，≥ 4 周）
