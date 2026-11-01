@@ -218,3 +218,21 @@ WF:
     - {name: tv0.35_core0.3, overrides: {sleeves.core.target_annual_vol: 0.35, sleeves.satellite.target_annual_vol: 0.35, sleeves.core.capital_weight: 0.3, sleeves.satellite.capital_weight: 0.7}}
     - {name: tv0.35_core0.5, overrides: {sleeves.core.target_annual_vol: 0.35, sleeves.satellite.target_annual_vol: 0.35, sleeves.core.capital_weight: 0.5, sleeves.satellite.capital_weight: 0.5}}
     - {name: tv0.35_core0.7, overrides: {sleeves.core.target_annual_vol: 0.35, sleeves.satellite.target_annual_vol: 0.35, sleeves.core.capital_weight: 0.7, sleeves.satellite.capital_weight: 0.3}}
+
+# ---- R2：多周期均线集成（预注册见 doc/research/log.md "R2 预注册"）----
+R2a:
+  title: 多周期均线集成大盘过滤（主方案 = 50/100/150/200）
+  hypothesis: 集成降低对单一均线的依赖，在不同组合之间稳定，且不低于"典型单一均线"的水平
+  criteria: 见研究日志 R2 预注册第 1～4 条
+  variants:
+    - {name: ens_50_100_150_200, overrides: {regime.mode: ensemble, regime.ensemble_periods: [50, 100, 150, 200]}}
+    - {name: ens_50_100_200, overrides: {regime.mode: ensemble, regime.ensemble_periods: [50, 100, 200]}}
+    - {name: ens_75_100_150, overrides: {regime.mode: ensemble, regime.ensemble_periods: [75, 100, 150]}}
+    - {name: ens_100_150_200, overrides: {regime.mode: ensemble, regime.ensemble_periods: [100, 150, 200]}}
+    - {name: ens_primary_cost_x2, overrides: {regime.mode: ensemble, regime.ensemble_periods: [50, 100, 150, 200]}, engine: {fee: 0.002, slippage: 0.001}}
+
+R2b:
+  title: 对照组：当前配置下的单一均线邻域（SMA 75/100/150 × 缓冲 1%/2%/3%）
+  grid:
+    regime.sma_period: [75, 100, 150]
+    regime.buffer: [0.01, 0.02, 0.03]

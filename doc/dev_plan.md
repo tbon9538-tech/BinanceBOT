@@ -14,6 +14,8 @@
 | M5 | ✅ 完成 | 交易所客户端、执行器、持久化、run_once；testnet 联调通过（`doc/testnet_log.md`） |
 | M6 | ✅ 完成 | 风控、NAV、kill、通知、心跳、执行回放（差异 ≤ 0.4%）、5 项故障演练 |
 | M7 | ✅ 代码与文档完成 | Docker、README、部署说明；**demo 4 周前向运行需要日历时间与 demo Key，尚未开始**（C4 由用户决定） |
+| R2（Q14 之后） | ✅ 完成，**未采用** | 多周期均线集成：更稳但水平不高于典型单一均线（研究日志 R2）；配置不变 |
+| demo 前向观察 | ⏳ 等待 demo Key | 状态库按环境拆分（`data/state-demo.db`）；周报命令 `python -m bot forward` |
 
 
 ---
