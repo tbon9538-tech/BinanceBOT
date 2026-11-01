@@ -236,3 +236,22 @@ R2b:
   grid:
     regime.sma_period: [75, 100, 150]
     regime.buffer: [0.01, 0.02, 0.03]
+
+# ---- R3：CTREND 式价格 + 成交量趋势信号（预注册见 doc/research/log.md "R3 预注册"）----
+R3a:
+  title: CTREND 式卫星选币信号（主方案 = 价格+成交量，W = 52 周）
+  hypothesis: 多周期价格与成交量信号经滚动横截面回归合成后排序，不劣于、且在不同设定间稳定地优于单一周期 ret/vol
+  criteria: 见研究日志 R3 预注册第 1～4 条
+  variants:
+    - {name: pv_w26, overrides: {sleeves.satellite.score: ctrend, sleeves.satellite.ctrend_signals: price_volume, sleeves.satellite.ctrend_window_weeks: 26}}
+    - {name: pv_w52, overrides: {sleeves.satellite.score: ctrend, sleeves.satellite.ctrend_signals: price_volume, sleeves.satellite.ctrend_window_weeks: 52}}
+    - {name: pv_w104, overrides: {sleeves.satellite.score: ctrend, sleeves.satellite.ctrend_signals: price_volume, sleeves.satellite.ctrend_window_weeks: 104}}
+    - {name: p_w26, overrides: {sleeves.satellite.score: ctrend, sleeves.satellite.ctrend_signals: price, sleeves.satellite.ctrend_window_weeks: 26}}
+    - {name: p_w52, overrides: {sleeves.satellite.score: ctrend, sleeves.satellite.ctrend_signals: price, sleeves.satellite.ctrend_window_weeks: 52}}
+    - {name: p_w104, overrides: {sleeves.satellite.score: ctrend, sleeves.satellite.ctrend_signals: price, sleeves.satellite.ctrend_window_weeks: 104}}
+    - {name: pv_w52_cost_x2, overrides: {sleeves.satellite.score: ctrend, sleeves.satellite.ctrend_signals: price_volume, sleeves.satellite.ctrend_window_weeks: 52}, engine: {fee: 0.002, slippage: 0.001}}
+
+R3b:
+  title: 对照组：当前配置（ret_over_vol）的回看期邻域 14 / 21 / 28
+  grid:
+    sleeves.satellite.momentum_lookback: [14, 21, 28]
