@@ -39,7 +39,7 @@
 
 ### B demo 前向观察（进行中，≥ 4 周）
 
-- **运行**：本机 Docker 常驻，每天 00:10 UTC；电脑与 Docker Desktop 需保持开机。
+- **运行**：本机（macOS，2026-11-01 从原 Windows 电脑迁来，原电脑容器已删除）Docker 常驻，每天 00:10 UTC（北京时间 08:10）；电脑需保持开机且不休眠，Docker Desktop 需在运行。
 - **每周**：`docker compose exec bot uv run --no-sync python -m bot forward`，结果追加到 `doc/demo_log.md` 的周表。
 - **C4 的进入条件**（dev_plan M7-3，最早约 2026-11-30）：
 

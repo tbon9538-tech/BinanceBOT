@@ -1,4 +1,4 @@
-# 交接文档（2026-11-01）
+# 交接文档（2026-11-02）
 
 > 写给接手的 Claude Code 会话。先读完本文件，再读 `CLAUDE.md`（Claude Code 会自动加载），然后按"第 2 节"的顺序读文档。
 > 与用户沟通一律用**中文**。
@@ -7,12 +7,12 @@
 
 ## 1. 一句话现状
 
-币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（335 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。目前在用户本机用 Docker 常驻跑 **demo 前向观察**（2026-11-01 开始）。
+币安现货"BTC 趋势核心 + 山寨动量卫星"机器人，**代码与文档 M0～M7 全部完成**（335 项测试通过）。工程上可以在 testnet / demo 稳定运行，**但策略没有通过保留集检验，不应投入真实资金**。目前在用户本机（macOS）用 Docker 常驻跑 **demo 前向观察**（2026-11-01 开始；2026-11-01 16:49 UTC 从原来的 Windows 电脑迁到本机，原电脑的容器已删除）。
 
 | 项目 | 状态 |
 |---|---|
-| 代码仓库 | `E:\projects1101\BinanceBOT`，分支 `master`，远端 `origin` = https://github.com/tbon9538-tech/BinanceBOT （**公开仓库**），没有 tag |
-| 运行中 | Docker 容器 `binancebot-bot-1`（`docker compose up -d`，`run --daemon`），每天 00:10 UTC 运行一次，`env: demo` |
+| 代码仓库 | `/Users/yeto/Documents/BinanceBOT`（macOS），分支 `master`，远端 `origin` = https://github.com/tbon9538-tech/BinanceBOT （**公开仓库**），没有 tag |
+| 运行中 | **本机** Docker 容器 `binancebot-bot-1`（`docker compose up -d`，`run --daemon`），每天 00:10 UTC 运行一次，`env: demo`。这是该 demo 账户**唯一**的运行处 |
 | 未提交改动 | 无（`.dockerignore` 排除 `dist` 已经用户同意并提交） |
 | 研究 | E0～E11 完成；保留集**已运行过一次，不得再运行**；R2（多周期均线集成）未通过；试验累计 121 个 |
 | 待用户决定 | Q6 服务器地区、Q12 正式资金规模、C4（demo 观察满 4 周后是否上实盘） |
@@ -36,16 +36,18 @@
 
 ## 3. 环境与命令
 
-- Windows 11；shell 可用 Git Bash 或 PowerShell。Python 3.13 由 uv 管理。
-- **`uv` 不在 PATH 上**，一律用 `py -3.13 -m uv ...`（`scripts/check.ps1` 会自动处理）。
-- 中文输出在 Git Bash 中加 `PYTHONIOENCODING=utf-8`，否则会乱码。
+- macOS（Apple Silicon），shell 为 zsh。Python 3.13 由 uv 管理；`uv` 用 Homebrew 安装（`/opt/homebrew/bin/uv`），在 PATH 上。
+- **`docker` 不在 PATH 上**：Docker Desktop 的命令行在 `/Applications/Docker.app/Contents/Resources/bin`，执行 docker 命令前先 `export PATH=/Applications/Docker.app/Contents/Resources/bin:$PATH`。
+- 定时运行依赖电脑在 00:10 UTC（北京时间 08:10）**不休眠**、Docker Desktop 在运行；休眠期间错过的运行会在唤醒后补跑一次（daemon 按墙上时钟判断）。
 
 ```bash
-py -3.13 -m uv sync
-py -3.13 -m uv run pytest                         # 单元测试（pytest-socket 禁止联网）
-powershell -NoProfile -Command ".\scripts\check.ps1"   # ruff + 格式 + mypy + pytest，一次跑完
-py -3.13 -m uv run python -m bot --help
+uv sync
+uv run pytest                                     # 单元测试（pytest-socket 禁止联网）
+scripts/check.sh                                  # ruff + 格式 + mypy + pytest，一次跑完
+uv run python -m bot --help
 ```
+
+（原来的 Windows 电脑上用 `py -3.13 -m uv ...` 和 `.\scripts\check.ps1`。）
 
 **容器运行时，所有 bot 命令都通过容器执行**，不要在主机上同时写同一个 SQLite 状态库：
 
@@ -66,11 +68,10 @@ docker compose logs -f bot
 |---|---|
 | `.env` | **当前生效的是 demo Key**（HMAC）；testnet Key 以 `# testnet:` 注释形式保留。两套 Key 都曾在聊天中明文发送，**建议用户重新生成**。不要在回复里复述 Key |
 | `data/market.db` | 行情缓存：775 个 USDT 交易对（含 255 个已下架），2018-01 起；容器每天通过 REST 增量更新 |
-| `data/raw/` | data.binance.vision 原始 zip（已校验 CHECKSUM） |
 | `data/state-demo.db` | demo 状态库（受管持仓、外部基线、快照、订单意图、成交） |
-| `data/state-testnet.db` | testnet 状态库；`data/state.db.bak-testnet-before-D062` 是修复 D-062 之前的旧库备份 |
-| `reports/` | 完整回测报告；每个实验的摘要已复制到 `doc/research/reports/` |
-| `dist/binance-bot-0.1.0-21f7e18/` | **别人**基于旧提交 21f7e18 打的部署包（含 317 MB 镜像），已加入 `.gitignore`；不是当前版本 |
+| `logs/bot.log` | 运行日志（从原电脑搬来，接着写） |
+
+本机只搬来了上面几项。原 Windows 电脑上还有 `data/raw/`（data.binance.vision 原始 zip）、`data/state-testnet.db`（testnet 状态库及 D-062 之前的备份）、`reports/`（完整回测报告，摘要已在 `doc/research/reports/`）和旧部署包 `dist/binance-bot-0.1.0-21f7e18/`，**本机没有**；做 testnet 联调或重跑研究前需要另行复制或重新生成。
 
 账户情况：
 - demo：5000 USDT + 5000 USDC 虚拟资金。USDC 记为外部基线；策略资金上限 500 USDT；已持有少量 BTC、INJ、PEPE。
@@ -78,8 +79,8 @@ docker compose logs -f bot
 
 从 GitHub 克隆接手时：克隆下来的只有代码和文档，`.env` 和 `data/` 都不在仓库里。2026-11-02 已验证：全新克隆后 `uv sync` + `check.ps1` 全部通过（ruff、mypy、335 项测试），不依赖任何未入库的文件；保留集守卫读取的 `doc/research/holdout_runs.log` 和试验记录 `trials.csv` 都在仓库里。
 
-- **只做开发**（推荐）：`git clone` 后执行 `uv sync` 和检查即可，单元测试不需要 `.env` 和 `data/`。demo 容器继续在原来那台电脑上运行；代码推到 GitHub 后，在那台电脑上 `git pull` 再 `docker compose up -d --build`。
-- **要在新电脑上运行 demo**：从原来那台电脑复制 `.env`（或按 `.env.example` 重新填写）和 `data/state-demo.db`；行情库可以复制 `data/market.db`，也可以用 `python -m bot data sync` 重新下载。**同一时间只能有一处运行容器**：先在旧电脑执行 `docker compose down`，再在新电脑执行 `docker compose up -d --build`，否则两处会对同一个 demo 账户重复下单。不带 `state-demo.db` 直接启动，账户里已有的 BTC/INJ/PEPE 会被当成外部资产，与旧的状态库对不上。
+- **只做开发**（推荐）：`git clone` 后执行 `uv sync` 和检查即可，单元测试不需要 `.env` 和 `data/`。demo 容器继续在本机（macOS）运行；代码推到 GitHub 后，在本机 `git pull` 再 `docker compose up -d --build`。
+- **要把 demo 再搬到别的电脑**：从本机复制 `.env`（或按 `.env.example` 重新填写）和 `data/state-demo.db`；行情库可以复制 `data/market.db`，也可以用 `python -m bot data sync` 重新下载。**同一时间只能有一处运行容器**：先在本机执行 `docker compose down`，再在新电脑执行 `docker compose up -d --build`，否则两处会对同一个 demo 账户重复下单。不带 `state-demo.db` 直接启动，账户里已有的 BTC/INJ/PEPE 会被当成外部资产，与旧的状态库对不上。2026-11-01 从 Windows 迁到本机时就是按这个流程做的，迁移后 `status` 与原电脑一致。
 
 仓库是**公开**的：推送前确认没有 Key、`.env`、`data/` 混进提交（2026-11-01 推送前已扫描全部历史，没有发现 Key；`tests/test_signing.py` 中的 64 位字符串是币安文档里公开的示例 Key）。
 
@@ -170,7 +171,8 @@ scripts/                   check.ps1/.sh、drills/run_drills.py（5 项离线演
 
 ```bash
 git status && git log --oneline -3
-powershell -NoProfile -Command ".\scripts\check.ps1"
+scripts/check.sh
+export PATH=/Applications/Docker.app/Contents/Resources/bin:$PATH
 docker compose ps
 docker compose exec bot uv run --no-sync python -m bot status
 docker compose logs --tail 20 bot
