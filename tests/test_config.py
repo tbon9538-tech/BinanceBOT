@@ -13,7 +13,7 @@ from tests.conftest import ASSETS_PATH, CONFIG_PATH
 
 def test_shipped_config_loads() -> None:
     cfg = load_config(CONFIG_PATH)
-    assert cfg.env is Env.TESTNET
+    assert cfg.env in (Env.TESTNET, Env.DEMO)  # 仓库自带的配置永远不能是 live
     assert set(cfg.enabled_sleeves()) == {"core", "satellite"}
     assert cfg.sleeves["core"].type == "trend"
     assert cfg.sleeves["satellite"].type == "xs_momentum"
