@@ -5,10 +5,14 @@ services:
     image: binance-bot:latest
     restart: unless-stopped
     env_file: .env
+    environment:
+      # 紧急停止文件放在挂载的 data/ 下：在主机项目目录创建 data/KILL 即可（D-070）
+      BOT_KILL_FILE: /app/data/KILL
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./reports:/app/reports
       - ./config:/app/config:ro
+      - ./doc/forward:/app/doc/forward   # 前向周报（python -m bot forward）写到主机
     # 常驻模式：每天在 config.yaml 的 rebalance.run_time_utc 运行一次 run --once
     command: ["run", "--daemon"]

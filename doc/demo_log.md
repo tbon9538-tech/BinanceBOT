@@ -13,6 +13,13 @@
 | 建仓 | `run --once --force-rebalance` | 3 个意图全部 FILLED（INJ 分 2 笔成交）；手续费 0.1%，从买到的币中扣除（与实盘一致）；策略仓位约 6%（资金上限 500 / 净值 5000） |
 | 幂等 | 立即再运行 `run --once` | "今天已完成调仓"，零订单；无异常事件 |
 
+## 2026-11-01 常驻运行
+
+- 方式：本机 Docker 常驻（`docker compose up -d`，`run --daemon`，`restart: unless-stopped`），每天 00:10 UTC（北京时间 08:10）执行一次。
+- 实测：容器读写挂载目录中的 `data/state-demo.db` 正常（快照写入成功，主机侧 `integrity_check` 为 ok）。
+- 紧急停止：`docker compose exec bot uv run --no-sync python -m bot kill`，或在主机创建 `data/KILL`。
+- 前提：电脑与 Docker Desktop 保持运行；关机、休眠会漏跑（周报中可见）。
+
 ## 每周观察（追加）
 
 | 周 | 运行天数 / 漏跑 | 前向收益 | 研究引擎同期（折算） | 手续费率 / 成交偏移 | 备注 |

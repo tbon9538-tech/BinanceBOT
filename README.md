@@ -76,7 +76,18 @@ docker compose logs -f
 
 `data/`、`logs/`、`reports/` 挂载为卷；`config/` 只读挂载；`.env` 通过 `env_file` 注入。镜像以非 root 用户运行。
 
-容器内紧急停止：`docker compose exec bot uv run --no-sync python -m bot kill`。
+容器运行时，**所有命令都通过容器执行**（不要在主机上同时操作同一个 SQLite 状态库）：
+
+```bash
+docker compose exec bot uv run --no-sync python -m bot status     # 查看状态
+docker compose exec bot uv run --no-sync python -m bot forward    # 前向周报（写到主机的 doc/forward/）
+docker compose exec bot uv run --no-sync python -m bot kill       # 立即紧急停止
+docker compose logs -f bot                                        # 查看日志（也写在 logs/bot.log）
+```
+
+不方便执行命令时，在主机项目目录创建 `data/KILL` 文件，常驻进程会在 60 秒内检测到并执行紧急停止。
+
+Docker Desktop 需要设置为开机自动启动（Settings → General → Start Docker Desktop when you sign in），容器的 `restart: unless-stopped` 才会在开机后自动恢复。电脑关机或休眠期间会漏跑，漏跑的天数会出现在 `forward` 周报里。
 
 **cron（Linux，不用常驻进程）**
 

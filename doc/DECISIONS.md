@@ -113,3 +113,4 @@
 | D-067 | 不同环境的状态库 | `data/state-<env>.db`（testnet / demo / live 各一个）；已有的 testnet 状态迁移为 `data/state-testnet.db` | 不同账户的受管持仓、外部基线、净值快照不能混用 |
 | D-068 | 前向观察工具 | 新增子命令 `forward`：运行情况（漏跑）、执行质量（实际手续费率、相对开盘价的成交偏移）、与研究引擎同期模拟的对比；报告写入 `doc/forward/` | dev_plan M7-3 的周报要求；前向数据只用于观察与检验，不用于调参 |
 | D-069 | 研究框架中的大盘过滤 | 新增 `regime.mode: ensemble`（R2），按处于 Risk-On 的均线比例缩放两个袖子的原始目标；sma / tsmom 模式结果不变（已用 v3 默认配置回测核对） | R2 预注册；未通过，默认仍为 sma |
+| D-070 | 容器中的 KILL 文件位置 | 路径可由环境变量 `BOT_KILL_FILE` 指定（默认项目根目录 `KILL`）；docker-compose 设为 `/app/data/KILL`，主机创建 `data/KILL` 即可生效；周报目录 `doc/forward/` 也挂载到主机 | 原来的 KILL 文件在容器内部，主机上创建无效；容器运行时所有命令通过 `docker compose exec` 执行，避免主机与容器同时操作同一个 SQLite |

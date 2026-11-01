@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -44,7 +45,8 @@ from bot.strategy.universe import AssetClass, classify_asset
 log = logging.getLogger(__name__)
 
 QUOTE = "USDT"
-KILL_FILE = Path("KILL")
+# 容器中 KILL 文件放在挂载的 data/ 下（BOT_KILL_FILE=/app/data/KILL），主机上创建 data/KILL 即可生效（D-070）
+KILL_FILE = Path(os.environ.get("BOT_KILL_FILE", "KILL"))
 LOCK_FILE = Path("data/run.lock")
 DATA_RETRIES = 6
 DATA_RETRY_SLEEP_SEC = 300.0
