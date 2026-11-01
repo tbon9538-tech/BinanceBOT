@@ -277,3 +277,19 @@ R4b:
     - {name: own75, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 75, sleeves.core.asset_buffer: 0.02}}
     - {name: own100, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 100, sleeves.core.asset_buffer: 0.02}}
     - {name: own150, overrides: {sleeves.core.asset_filter: own_sma, sleeves.core.asset_sma_period: 150, sleeves.core.asset_buffer: 0.02}}
+
+# ---- R8：山寨季过滤（预注册见 doc/research/log.md "R8 预注册"；研究窗口 2020-01-01 ～ 2026-10-31，D-085）----
+R8a:
+  title: 山寨季过滤（山寨篮子 N 日收益跑赢 BTC 时才开卫星；主方案 N = 60）
+  hypothesis: 只在山寨币整体跑赢 BTC 时持有卫星，可以避开山寨币相对走弱的阶段，在新旧两段都不劣于当前配置
+  criteria: 见研究日志 R8 预注册第 1～4 条
+  variants:
+    - {name: alt30, overrides: {sleeves.satellite.alt_season_lookback: 30}}
+    - {name: alt60, overrides: {sleeves.satellite.alt_season_lookback: 60}}
+    - {name: alt90, overrides: {sleeves.satellite.alt_season_lookback: 90}}
+    - {name: alt60_cost_x2, overrides: {sleeves.satellite.alt_season_lookback: 60}, engine: {fee: 0.002, slippage: 0.001}}
+
+R8b:
+  title: 对照组：当前配置（不做山寨季过滤）在新研究窗口上的结果
+  variants:
+    - name: current
