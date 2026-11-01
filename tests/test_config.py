@@ -26,7 +26,7 @@ def test_shipped_config_loads() -> None:
 def test_shipped_assets_load() -> None:
     assets = load_assets(ASSETS_PATH)
     assert "USDC" in assets.excluded_set()
-    assert assets.approved_assets == []
+    assert "ETH" in assets.approved_assets and "NVDAB" not in assets.approved_assets
 
 
 def test_money_fields_are_exact_decimals() -> None:

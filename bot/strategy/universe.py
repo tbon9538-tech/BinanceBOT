@@ -126,7 +126,9 @@ def weekend_move_ratio(seg: pd.DataFrame, as_of: date, days: int = 90) -> float 
     return float(weekend.mean() / weekday.mean())
 
 
-def suspected_equity_token(seg: pd.DataFrame, as_of: date, base_asset: str = "", threshold: float = 0.35) -> bool:
+def suspected_equity_token(
+    seg: pd.DataFrame, as_of: date, base_asset: str = "", threshold: float = 0.35
+) -> bool:
     """疑似代币化股票/ETF：周末波动显著偏低，**并且**资产名以 B 结尾（币安的股票代币统一为 xxxB）。
 
     只看周末波动会误伤机构化之后周末清淡的 BTC 等大币（D-058）。

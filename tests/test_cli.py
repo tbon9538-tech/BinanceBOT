@@ -26,18 +26,10 @@ def test_spec_subcommands_are_all_registered() -> None:
     assert set(COMMANDS) == expected
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["run", "--once"],
-        ["status"],
-        ["kill"],
-        ["pause"],
-    ],
-)
-def test_placeholder_commands_validate_config_then_exit(argv, capsys) -> None:  # type: ignore[no-untyped-def]
-    assert main(["--config", str(CONFIG_PATH), *argv]) == EXIT_NOT_IMPLEMENTED
-    assert "尚未实现" in capsys.readouterr().err
+def test_every_command_has_a_handler() -> None:
+    import bot.cli as cli
+
+    assert set(cli.HANDLERS) == set(COMMANDS)
 
 
 def test_bad_config_returns_config_error(tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -50,11 +42,13 @@ def test_research_command_end_in_holdout_is_rejected(capsys) -> None:  # type: i
     assert "保留集" in capsys.readouterr().err
 
 
-def test_holdout_requires_final_and_today(capsys, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    # 绝不能在测试中真的运行保留集：用替身代替真实命令
+def test_holdout_requires_final_and_today(capsys, monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # 绝不能在测试中真的运行保留集：用替身代替真实命令，运行记录写到临时目录
     import bot.cli as cli
+    from bot.data.holdout import HoldoutLog
 
     monkeypatch.setitem(cli.HANDLERS, "holdout", lambda cfg, args: EXIT_NOT_IMPLEMENTED)
+    monkeypatch.setattr(cli, "HoldoutLog", lambda: HoldoutLog(tmp_path / "holdout_runs.log"))
     assert main(["--config", str(CONFIG_PATH), "holdout"]) == EXIT_HOLDOUT_VIOLATION
     assert (
         main(["--config", str(CONFIG_PATH), "holdout", "--final", "--confirm", "2000-01-01"])

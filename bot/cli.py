@@ -15,6 +15,7 @@ from pathlib import Path
 
 from bot import paths
 from bot.app.data_commands import cmd_assets, cmd_data
+from bot.app.ops_commands import cmd_adopt, cmd_capital, cmd_kill, cmd_pause, cmd_resume, cmd_run, cmd_status
 from bot.app.research_commands import (
     cmd_backtest,
     cmd_bootstrap,
@@ -39,6 +40,7 @@ DEFAULT_CONFIG = Path("config/config.yaml")
 
 def _add_run(p: argparse.ArgumentParser) -> None:
     p.add_argument("--once", action="store_true", help="执行一次每日流程后退出（spec §6.2）")
+    p.add_argument("--daemon", action="store_true", help="常驻：每天在 rebalance.run_time_utc 执行一次")
     p.add_argument("--dry-run", action="store_true", help="只计算并输出订单计划，不下单")
     p.add_argument(
         "--force-rebalance", action="store_true", help="忽略当日已完成检查与权重容忍带（testnet 联调用）"
@@ -160,6 +162,13 @@ HANDLERS: dict[str, Handler] = {
     "bootstrap": cmd_bootstrap,
     "dsr": cmd_dsr,
     "holdout": cmd_holdout,
+    "run": cmd_run,
+    "status": cmd_status,
+    "kill": cmd_kill,
+    "pause": cmd_pause,
+    "resume": cmd_resume,
+    "capital": cmd_capital,
+    "adopt": cmd_adopt,
 }
 
 RESEARCH_COMMANDS = {"backtest", "experiment", "walkforward", "bootstrap"}
