@@ -40,7 +40,7 @@
   | 预留：WebSocket API | testnet `wss://ws-api.testnet.binance.vision/ws-api/v3`；demo `wss://demo-ws-api.binance.com/ws-api/v3`；live `wss://ws-api.binance.com:443/ws-api/v3` | v1 不使用 |
 
 - **技术栈**：Python 3.11+、`httpx`（同步客户端即可）、`pandas`、`numpy`、`pyyaml`、`pydantic` v2（配置校验）、`python-dotenv`、`SQLAlchemy` 2.x + SQLite、`cryptography`（Ed25519 签名）、`matplotlib`、`pytest`。
-- **不使用** `binance-connector`（官方已标为 deprecated），默认也不使用 `binance-sdk-spot`，改为自研轻量客户端（见 §6.1 和 `open_questions.md` Q4）。不使用 Freqtrade。
+- **不使用** `binance-connector`（官方已标为 deprecated），也不使用 `binance-sdk-spot`，改为自研轻量客户端（见 §6.1；`open_questions.md` Q4，2026-11-01 已确认）。不使用 Freqtrade。
 
 ---
 
