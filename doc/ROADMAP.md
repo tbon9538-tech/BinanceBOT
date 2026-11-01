@@ -116,7 +116,7 @@
 | F2 | Telegram 命令（`/status`、`/kill` 等） | A1 | 管理界面（E1）已能在手机上查看和操作，需求大大降低；如仍需要再重新讨论 Q5 |
 | F3 | BNB 手续费抵扣（Q8 选 B） | 上实盘前评估 | 必须先处理 BNB 与卫星 `approved_assets` 的冲突 |
 | F4 | User Data Stream（`userDataStream.subscribe.signature`） | 有日内执行需求时再做 | listenKey 已停用 |
-| F5 | USDT 活期理财 | 接口验证（spike） | 需要 SAPI 与额外权限，testnet 不支持 |
+| F5 | USDT 活期理财 | 接口验证（spike） | R7 估算按 4% 年化可提高约 3.3 个百分点；2026-11-02 探测：**demo 不支持** `/sapi/v1/simple-earn/*`（404），testnet 也没有 `/sapi`，只能在实盘阶段（D）实现和验证（D-087） |
 | F6 | 灰尘兑换 BNB、下架公告监控 | — | 下架公告的可靠数据源**目前不确定** |
 | F7 | PBO / CSCV 研究工具 | 研究线需要时 | D-016 推迟项 |
 

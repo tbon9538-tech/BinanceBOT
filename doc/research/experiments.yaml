@@ -304,3 +304,14 @@ R7:
     - {name: y2, overrides: {backtest.cash_yield_annual: 0.02}}
     - {name: y4, overrides: {backtest.cash_yield_annual: 0.04}}
     - {name: y6, overrides: {backtest.cash_yield_annual: 0.06}}
+
+# ---- R10：资金费率套利袖子与组合（预注册见 doc/research/log.md "R10 预注册"；只做研究，不涉及交易代码）----
+# 实验由 R10 专用的研究命令运行（期现对冲需要永续合约数据，不走现货研究引擎），定义写在这里以便追溯。
+R10:
+  title: BTC + ETH 期现对冲（现货多 + 永续空）赚资金费；与当前策略组合
+  carry_symbols: [BTCUSDT, ETHUSDT]
+  leverage: 2                      # 永续空头保证金 = 名义 / 2；袖子资金 C 中现货名义 = C / 1.5
+  entry_hurdle_annual: [none, 0.0, 0.05, 0.10]   # none = 一直持有；主方案 0.05
+  trailing_days: 7
+  combo_carry_weight: [0.3, 0.5]   # 组合中套利袖子的资金比例；主方案 0.5
+  cash_yield_annual: 0.04          # 组合中趋势策略闲置现金按 R7 的 4% 计息
