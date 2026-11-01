@@ -81,7 +81,9 @@ def test_page_shows_status_and_charts(env) -> None:  # type: ignore[no-untyped-d
     r = client.get("/")
     assert r.status_code == 200
     html = r.text
-    assert "状态正常" in html and "mom1:2026-11-02" in html and "单位净值" in html
+    # 测试环境没有常驻进程的存活标记：页首说明定时运行未进行，检查项标出常驻进程
+    assert "定时运行未进行" in html and "mom1:2026-11-02" in html and "单位净值" in html
+    assert 'class="check bad"' in html and "仓位 · 占策略资金" in html
     csp = r.headers["content-security-policy"]
     assert r.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in csp
     assert "script-src 'self'" in csp and "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
@@ -261,3 +263,40 @@ def test_regime_chart_uses_market_history(env) -> None:  # type: ignore[no-untyp
     # 没有行情库时退回状态库里运行时写入的记录
     fallback = build_overview(deps.cfg, deps.repo, deps.kill_file, now=dash.now())
     assert 0 < len(fallback.regime_history) < 365
+
+
+def test_headline_puts_the_most_urgent_state_first(env, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from dataclasses import replace
+
+    from bot.app.dashboard.data import DaemonStatus, build_overview, headline, health_checks
+
+    dash, deps, *_ = env
+    now = dash.now()
+    alive = DaemonStatus(True, "waiting", now - timedelta(seconds=40), now + timedelta(hours=3))
+    ov = replace(build_overview(deps.cfg, deps.repo, deps.kill_file, now=now), daemon=alive, stale=False)
+    assert headline(ov).tone == "good" and headline(ov).title == "运行正常" and "北京" in headline(ov).sub
+    assert headline(replace(ov, stale=True)).title == "需要检查"
+    assert headline(replace(ov, state="PAUSED", stale=True)).title == "已暂停交易"
+    assert headline(replace(ov, state="PAUSED", kill_file=True)).title == "等待紧急停止"
+    assert headline(replace(ov, state="KILLED", kill_file=True)).tone == "critical"
+
+    checks = {c.label: c for c in health_checks(ov, telegram=False, heartbeat=True)}
+    assert checks["常驻进程"].level == "ok" and "40 秒前" in checks["常驻进程"].value
+    assert checks["Telegram 通知"].level == "off" and checks["外部心跳"].level == "ok"
+    stale = {c.label: c for c in health_checks(replace(ov, stale=True), telegram=True, heartbeat=True)}
+    assert stale["最近运行"].level == "bad" and "26 小时" in stale["最近运行"].value
+
+
+def test_exposure_is_measured_against_strategy_capital(env) -> None:  # type: ignore[no-untyped-def]
+    from dataclasses import replace
+    from decimal import Decimal
+
+    from bot.app.dashboard.data import build_overview
+
+    dash, deps, *_ = env
+    ov = build_overview(deps.cfg, deps.repo, deps.kill_file, now=dash.now())
+    # 净值 5000、上限 500、持币占净值 6%：持币 300，占策略资金 60%
+    ov = replace(ov, nav=Decimal(5000), gross=Decimal("0.06"), max_capital=Decimal(500))
+    assert ov.capital == 500 and ov.held_value == pytest.approx(300)
+    assert ov.exposure_of_capital == pytest.approx(0.6)
+    assert replace(ov, nav=None).exposure_of_capital is None

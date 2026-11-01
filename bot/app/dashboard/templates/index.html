@@ -8,130 +8,176 @@
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/app.js" defer></script>
 </head>
-{%- set state_label = {"RUNNING": "状态正常", "PAUSED": "已暂停交易", "HALTED": "已熔断", "KILLED": "已紧急停止"} -%}
-{%- set state_cls = {"RUNNING": "good", "PAUSED": "warning", "HALTED": "critical", "KILLED": "critical"} -%}
+{%- set state_label = {"RUNNING": "运行中", "PAUSED": "已暂停交易", "HALTED": "已熔断", "KILLED": "已紧急停止"} -%}
+{%- set managed = [] -%}
+{%- for a, q, d, dust, frozen in ov.positions if a != "USDT" %}{% set _ = managed.append(a) %}{% endfor -%}
+{%- macro op(title, desc, btn, action, csrf, disabled=false, ok_label=none) -%}
+{% if disabled %}
+<div class="op"><div class="op-row"><span class="txt"><b>{{ title }}</b><span>{{ desc }}</span></span><span class="btn" aria-disabled="true">{{ btn }}</span></div></div>
+{% else %}
+<details class="op" name="ops">
+  <summary class="op-row"><span class="txt"><b>{{ title }}</b><span>{{ desc }}</span></span><span class="btn">{{ btn }}</span></summary>
+  <form class="confirm" method="post" action="{{ action }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {{ caller() }}
+    <div class="actions"><button class="btn" type="button" data-close>取消</button><button class="btn primary" type="submit">{{ ok_label or btn }}</button></div>
+  </form>
+</details>
+{% endif %}
+{%- endmacro -%}
 <body data-busy="{{ 1 if busy else 0 }}">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-logo" viewBox="0 0 24 24"><path fill="currentColor" d="M4 18h3V9H4v9Zm6.5 0h3V5h-3v13ZM17 18h3v-6h-3v6Z"/></symbol>
-  <symbol id="i-warn" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3 1.8 20.5h20.4L12 3Zm-1 6h2v6h-2V9Zm0 8h2v2h-2v-2Z"/></symbol>
-  <symbol id="i-info" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></symbol>
-  <symbol id="i-refresh" viewBox="0 0 24 24"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z"/></symbol>
-  <symbol id="i-theme" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20V2Zm0 2v16a8 8 0 0 0 0-16Z" opacity=".9"/></symbol>
+  <symbol id="i-logo" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5 18v-8M12 18V5M19 18v-6"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3 2 20h20L12 3Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 10v4M12 17v.5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 11v5M12 7.5v.5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m5 12 4.5 4.5L19 7"/></symbol>
+  <symbol id="i-off" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M6 12h12"/></symbol>
+  <symbol id="i-bad" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M12 5v9M12 18.5v.5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></symbol>
 </svg>
 
-<header class="topbar">
-  <div class="brand"><svg><use href="#i-logo"/></svg><span class="name">币安现货机器人</span><span class="env">{{ ov.env }}</span></div>
-  <div class="top-status">
-    <span class="pill {{ state_cls.get(ov.state, '') }}" title="系统状态：{{ ov.state }}"><span class="dot"></span>{{ state_label.get(ov.state, ov.state) }}</span>
-    {% if busy %}<span class="pill"><span class="spin"></span>操作进行中</span>{% endif %}
+<div class="app">
+<aside class="side">
+  <div class="brand">
+    <svg class="logo"><use href="#i-logo"/></svg>
+    <span class="who"><b>{{ ov.strategy_id }}</b><span>{{ ov.account_id }}</span></span>
+    <span class="env env-{{ ov.env }}">{{ ov.env|upper }}</span>
   </div>
-  <div class="top-actions">
-    <span class="updated" data-ts="{{ ov.now.isoformat() }}">更新于 {{ bj(ov.now) }}</span>
-    <a class="icon-btn" href="/" title="刷新" aria-label="刷新"><svg><use href="#i-refresh"/></svg></a>
-    <button class="icon-btn" id="theme-btn" type="button" hidden title="切换浅色 / 深色" aria-label="切换浅色 / 深色"><svg><use href="#i-theme"/></svg></button>
+  <nav class="nav" aria-label="分区">
+    <a href="#overview">概览</a><a href="#charts">走势</a><a href="#holdings">持仓</a><a href="#records">记录</a><a href="#ops">操作</a><a href="#system">系统</a>
+  </nav>
+  <div class="side-foot">
+    <button class="side-btn" id="theme-btn" type="button" hidden><svg><use href="#i-theme"/></svg><span data-theme-label>跟随系统</span></button>
+    <p>时间默认 UTC；标"北京"的为北京时间（UTC+8）</p>
   </div>
-</header>
-<nav class="subnav" aria-label="分区">
-  <a href="#overview">概览</a><a href="#charts">走势</a><a href="#holdings">持仓</a><a href="#ops">操作</a><a href="#records">记录</a><a href="#system">系统</a>
-</nav>
+</aside>
 
-<main>
+<main class="main">
 {% if toast %}
-<div class="toast" id="toast" role="status">
+<div class="toast {{ toast.status }}" id="toast" role="status">
   <span class="tag {{ toast.status }}">{{ toast.status }}</span>
-  <span><b>{{ toast.op }}</b>：{{ toast.message }}</span>
-  <a href="/#ops" class="close" aria-label="关闭" data-dismiss>×</a>
+  <span class="msg"><b>{{ toast.op }}</b>：{{ toast.message }}</span>
+  <a href="/#ops" class="close" aria-label="关闭提示" data-dismiss><svg><use href="#i-close"/></svg></a>
 </div>
 {% endif %}
 
 {% if ov.kill_file %}
 <div class="alert critical" role="alert"><svg class="ico"><use href="#i-warn"/></svg>
-  <div class="body"><b>KILL 文件存在</b>常驻进程检测到后会撤单并清仓受管资产。如果是误操作，请删除它。</div>
-  <button class="btn act" popovertarget="dlg-unkill" type="button">删除 KILL 文件</button>
+  <div class="body"><b>KILL 文件存在</b><span>常驻进程检测到后会撤单并清仓受管资产。如果是误操作，请删除它。</span></div>
+  <details class="inline-confirm">
+    <summary class="btn">删除 KILL 文件</summary>
+    <form method="post" action="/ops/unkill">
+      <span>取消尚未执行的紧急停止？</span>
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="1">
+      <button class="btn" type="button" data-close>取消</button><button class="btn primary" type="submit">删除</button>
+    </form>
+  </details>
 </div>
 {% endif %}
 {% if ov.state in ("KILLED", "HALTED") %}
 <div class="alert critical" role="alert"><svg class="ico"><use href="#i-warn"/></svg>
-  <div class="body"><b>系统{{ state_label[ov.state] }}</b>{{ ov.state_reason or "" }}（{{ utc(ov.state_since) }}）。需要在"操作"里手动恢复。</div>
+  <div class="body"><b>系统{{ state_label[ov.state] }}</b><span>{{ ov.state_reason or "" }}（{{ utc(ov.state_since) }}）。确认原因后在"操作"里手动恢复。</span></div>
+  <a class="btn" href="#ops">去处理</a>
 </div>
 {% endif %}
 {% if not ov.daemon.alive %}
-<div class="alert info"><svg class="ico"><use href="#i-info"/></svg>
-  <div class="body"><b>定时运行没有在进行</b>常驻进程没有运行{% if ov.daemon.seen %}（最后一次心跳 {{ utc(ov.daemon.seen) }}）{% endif %}，到点不会自动运行。启动：<code>docker compose up -d --build</code></div>
+<div class="alert info" role="status"><svg class="ico"><use href="#i-info"/></svg>
+  <div class="body"><b>定时运行没有在进行</b><span>常驻进程没有运行{% if ov.daemon.seen %}（最后一次心跳 {{ utc(ov.daemon.seen) }}）{% endif %}，到点不会自动运行。启动：<code>docker compose up -d --build</code></span></div>
 </div>
 {% elif ov.stale %}
-<div class="alert"><svg class="ico"><use href="#i-warn"/></svg>
-  <div class="body"><b>超过 26 小时没有新的运行</b>最近一次：{{ ov.last_run.run_id if ov.last_run else "无" }}。请检查日志。</div>
+<div class="alert warning" role="alert"><svg class="ico"><use href="#i-warn"/></svg>
+  <div class="body"><b>超过 26 小时没有新的运行</b><span>最近一次：{{ ov.last_run.run_id if ov.last_run else "无" }}。请检查常驻进程日志。</span></div>
 </div>
 {% endif %}
 
-<section id="overview" class="overview" aria-label="概览">
-  <div class="card hero">
-    <div class="label">净值（USDT，不含外部资产）</div>
-    <div class="value">{{ "{:,.2f}".format(ov.nav) if ov.nav is not none else "—" }}</div>
-    <div class="rows">
-      <div><span>单位净值</span><span><b class="num">{{ "%.4f"|format(ov.navu) if ov.navu is not none else "—" }}</b>
-        {% if ov.navu_change is not none %}<span class="delta {{ 'up' if ov.navu_change > 0 else ('down' if ov.navu_change < 0 else '') }}">{{ "%+.2f%%"|format(ov.navu_change * 100) }}</span> <span class="muted">较前一日</span>{% endif %}</span></div>
-      <div><span>策略资金上限</span><b>{{ "{:,.0f}".format(ov.max_capital) }} USDT</b></div>
-      <div><span>快照时间</span><span>{{ utc(ov.snapshot_time) }}</span></div>
+<section id="overview" class="card status tone-{{ hl.tone }}" aria-label="系统状态">
+  <div class="status-main">
+    <div class="status-title">
+      <span class="dot" aria-hidden="true"></span>
+      <h1>{{ hl.title }}</h1>
+      <span class="code" title="系统状态">{{ ov.state }}</span>
+      {% if busy %}<span class="busy"><span class="spin" aria-hidden="true"></span>后台操作进行中</span>{% endif %}
+    </div>
+    <p class="status-sub">{{ hl.sub }}</p>
+    <div class="status-meta">
+      <span class="updated" data-ts="{{ ov.now.isoformat() }}">更新于 {{ bj(ov.now) }}（北京）</span>
+      <a class="icon-btn" href="/" aria-label="刷新页面"><svg><use href="#i-refresh"/></svg></a>
     </div>
   </div>
-  <div class="tiles">
-    <div class="tile">
-      <div class="label">回撤</div>
-      <div class="value">{{ "%.1f%%"|format(ov.drawdown * 100) if ov.drawdown is not none else "—" }}</div>
-      <div class="sub">历史最大 {{ "%.1f%%"|format(ov.max_drawdown * 100) if ov.max_drawdown is not none else "—" }} · 熔断线 40%</div>
-    </div>
-    <div class="tile">
-      <div class="label">仓位</div>
-      <div class="value">{{ "%.0f%%"|format(ov.gross * 100) if ov.gross is not none else "—" }}</div>
-      <div class="meter" aria-hidden="true"><span style="width:{{ [100, (ov.gross or 0) * 100]|min }}%"></span></div>
-      <div class="sub">持币市值占净值</div>
-    </div>
-    <div class="tile">
-      <div class="label">大盘{% if regime_mode != "sma" %} · {{ regime_mode }}{% endif %}</div>
-      {% if ov.regime %}
-      <div class="value">{{ "Risk-On" if ov.regime.risk_on else "Risk-Off" }}</div>
-      <div class="sub">BTC {{ "{:,.0f}".format(ov.regime.close) }}{% if ov.btc_vs_sma is not none %} · {{ "高于" if ov.btc_vs_sma >= 0 else "低于" }}均线 {{ "%.1f%%"|format((ov.btc_vs_sma * 100)|abs) }}{% endif %}</div>
-      {% else %}<div class="value">—</div><div class="sub">还没有大盘数据</div>{% endif %}
-    </div>
-    <div class="tile">
-      <div class="label">定时运行</div>
-      <div class="value">{% if ov.daemon.alive %}{{ "运行中" if ov.daemon.state == "running" else "等待中" }}{% else %}未启动{% endif %}</div>
-      <div class="sub">{% if ov.daemon.alive and ov.daemon.next_run %}下次 {{ bj(ov.daemon.next_run) }}（北京）{% else %}不会自动运行{% endif %}<br>
-        最近 {% if ov.last_run %}<span class="badge {{ ov.last_run.status }}">{{ ov.last_run.status }}</span> {{ ov.last_run.run_date }}{% else %}无{% endif %}</div>
-    </div>
+  <ul class="checks" aria-label="检查项">
+    {% for c in checks %}
+    <li class="check {{ c.level }}">
+      <svg role="img" aria-label="{{ {'ok': '正常', 'off': '未配置', 'bad': '需要注意'}[c.level] }}"><use href="#i-{{ c.level }}"/></svg>
+      <span class="k">{{ c.label }}</span><span class="v">{{ c.value }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="kpis" aria-label="关键指标">
+  <div class="kpi">
+    <div class="label">仓位 · 占策略资金</div>
+    <div class="value num">{{ "%.1f%%"|format(ov.exposure_of_capital * 100) if ov.exposure_of_capital is not none else "—" }}</div>
+    <div class="meter" aria-hidden="true"><span style="width:{{ [100, (ov.exposure_of_capital or 0) * 100]|min }}%"></span></div>
+    <div class="sub">{% if ov.held_value is not none %}持币 {{ "{:,.2f}".format(ov.held_value) }} / {{ "{:,.0f}".format(ov.capital) }} USDT{% else %}还没有快照{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">策略资金 USDT</div>
+    <div class="value num">{{ "{:,.2f}".format(ov.capital) if ov.capital is not none else "—" }}</div>
+    <div class="sub">= min(账户净值, 上限 {{ "{:,.0f}".format(ov.max_capital) }})</div>
+  </div>
+  <div class="kpi">
+    <div class="label">单位净值</div>
+    <div class="value num">{{ "%.4f"|format(ov.navu) if ov.navu is not none else "—" }}</div>
+    <div class="sub">{% if ov.navu_change is not none %}<span class="delta {{ 'up' if ov.navu_change > 0 else ('down' if ov.navu_change < 0 else '') }}">{{ "%+.2f%%"|format(ov.navu_change * 100) }}</span> 较前一日{% else %}较前一日 —{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">回撤 · 熔断线 {{ "%.0f%%"|format(dd_halt * 100) }}</div>
+    <div class="value num">{{ "%.1f%%"|format(ov.drawdown * 100) if ov.drawdown is not none else "—" }}</div>
+    <div class="meter fuse" aria-hidden="true"><span style="width:{{ [100, ((ov.drawdown or 0)|abs) / dd_halt * 100]|min }}%"></span></div>
+    <div class="sub">历史最大 {{ "%.1f%%"|format(ov.max_drawdown * 100) if ov.max_drawdown is not none else "—" }}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">大盘 · {{ regime_mode if regime_mode != "sma" else "BTC SMA" ~ sma_period }}</div>
+    {% if ov.regime %}
+    <div class="value regime {{ 'on' if ov.regime.risk_on else 'off' }}">{{ "Risk-On" if ov.regime.risk_on else "Risk-Off" }}</div>
+    <div class="sub">BTC {{ "{:,.0f}".format(ov.regime.close) }}{% if ov.btc_vs_sma is not none %} · {{ "高于" if ov.btc_vs_sma >= 0 else "低于" }}均线 {{ "%.1f%%"|format((ov.btc_vs_sma * 100)|abs) }}{% endif %}</div>
+    {% else %}<div class="value">—</div><div class="sub">还没有大盘数据</div>{% endif %}
   </div>
 </section>
+
+<div class="cols">
+<div class="col-main">
 
 <section id="charts" class="card" aria-label="走势">
   <div class="card-head">
     <h2>走势</h2>
+    <span class="spacer"></span>
     <div class="seg" role="group" aria-label="时间范围">
       <button type="button" data-range="30">1 月</button><button type="button" data-range="90">3 月</button><button type="button" data-range="180">6 月</button><button type="button" data-range="365">1 年</button>
     </div>
   </div>
-  <div class="grid-2">
-    <div>
-      <figure class="chart" data-chart="nav" tabindex="0" aria-label="单位净值走势，可用左右方向键查看每天的数值">
-        <div class="chart-title"><b>单位净值</b></div>
-        <div class="plot">{{ nav_chart }}</div>
-      </figure>
-      <figure class="chart" data-chart="dd" tabindex="0" aria-label="回撤走势">
-        <div class="chart-title"><b>回撤</b><span class="muted">相对历史最高单位净值</span></div>
-        <div class="plot">{{ dd_chart }}</div>
-      </figure>
+  <figure class="chart" data-chart="regime" tabindex="0" aria-label="BTC 收盘价与均线，可用左右方向键查看每天的数值">
+    <div class="chart-title"><b>大盘：BTC</b>
+      <span class="legend"><span><i class="key-line ink"></i>收盘价</span><span><i class="key-line s2"></i>均线 SMA{{ sma_period }}</span><span><i class="key-rect"></i>Risk-On</span></span>
     </div>
-    <figure class="chart" data-chart="regime" tabindex="0" aria-label="BTC 收盘价与均线，可用左右方向键查看每天的数值">
-      <div class="chart-title"><b>大盘：BTC</b>
-        <span class="legend"><span><i class="key-line"></i>收盘价</span><span><i class="key-line s2"></i>均线 SMA{{ sma_period }}</span><span><i class="key-rect"></i>Risk-On</span></span>
-      </div>
-      <div class="plot">{{ regime_chart }}</div>
+    <div class="plot">{{ regime_chart }}</div>
+  </figure>
+  <div class="grid-2 sub-charts">
+    <figure class="chart" data-chart="nav" tabindex="0" aria-label="单位净值走势，可用左右方向键查看每天的数值">
+      <div class="chart-title"><b>单位净值</b><span class="muted">共 {{ ov.nav_history|length }} 天快照</span></div>
+      <div class="plot">{{ nav_chart }}</div>
+    </figure>
+    <figure class="chart" data-chart="dd" tabindex="0" aria-label="回撤走势">
+      <div class="chart-title"><b>回撤</b><span class="muted">相对历史最高单位净值 · 熔断线 -{{ "%.0f%%"|format(dd_halt * 100) }}</span></div>
+      <div class="plot">{{ dd_chart }}</div>
     </figure>
   </div>
   <details class="table-view">
     <summary>查看数据表（最近 30 天）</summary>
-    <div class="grid-2" style="margin-top:10px">
+    <div class="grid-2">
       <div class="tbl"><table>
         <thead><tr><th>日期</th><th class="n">单位净值</th><th class="n">回撤</th></tr></thead>
         <tbody>{% for p in ov.nav_history[-30:]|reverse %}<tr><td>{{ p.day }}</td><td class="n">{{ "%.4f"|format(p.navu) }}</td><td class="n">{{ "%.1f%%"|format(p.drawdown * 100) }}</td></tr>{% else %}<tr><td colspan="3" class="muted">无</td></tr>{% endfor %}</tbody>
@@ -149,7 +195,7 @@
   <div class="card-head">
     <h2>持仓：目标 vs 实际</h2><span class="hint">占策略资金 · 目标日 {{ ov.targets_date or "—" }}</span>
     <span class="spacer"></span>
-    <button class="btn" type="button" data-live-refresh hidden>刷新</button>
+    <button class="btn" type="button" data-live-refresh hidden>刷新余额</button>
   </div>
   <div id="live-slot" data-src="/partials/live" aria-live="polite"{% if inline_live %} data-loaded="1"{% endif %}>
     {% if inline_live %}{% include "_live.html" %}{% else %}
@@ -159,118 +205,111 @@
   </div>
 </section>
 
-<section id="ops" class="card" aria-label="操作">
-  <div class="card-head"><h2>操作</h2>{% if busy %}<span class="pill"><span class="spin"></span>后台操作进行中，完成后自动刷新</span>{% endif %}</div>
-  <div class="op-list">
-    {% if ov.state == "RUNNING" %}
-    <div class="op"><div class="txt"><b>暂停交易</b><span>之后的运行只更新快照和报告，不下单。不撤单、不清仓。</span></div>
-      <button class="btn" type="button" popovertarget="dlg-pause">暂停</button></div>
-    {% else %}
-    <div class="op"><div class="txt"><b>恢复交易</b><span>当前{{ state_label.get(ov.state, ov.state) }}。恢复后，下一次运行照常交易。</span></div>
-      <button class="btn primary" type="button" popovertarget="dlg-resume">恢复</button></div>
-    {% endif %}
-    {% if allow_run %}
-    <div class="op"><div class="txt"><b>立即运行一次</b><span>与每天定时运行相同：更新行情、计算目标、按需下单。今天已调过仓时只更新快照。</span></div>
-      <button class="btn" type="button" popovertarget="dlg-run" {{ "disabled" if busy }}>运行</button></div>
-    {% endif %}
-    <div class="op"><div class="txt"><b>确认当前余额</b><span>出现"无法解释的余额变化"（如 testnet 月度重置）时，把当前余额作为新的核对基准。</span></div>
-      <button class="btn" type="button" popovertarget="dlg-ack" {{ "disabled" if busy }}>确认</button></div>
-    {% if ov.state != "KILLED" %}
-    <div class="op danger"><div class="txt"><b>紧急停止并清仓</b><span>撤销策略挂单、卖出全部受管资产，系统进入 KILLED，之后需要手动恢复。</span></div>
-      <button class="btn danger" type="button" popovertarget="dlg-kill" {{ "disabled" if busy }}>紧急停止</button></div>
-    {% endif %}
-  </div>
-
-  {% if ov.state == "RUNNING" %}
-  <div class="dialog" id="dlg-pause" popover><form method="post" action="/ops/pause">
-    <h3>暂停交易？</h3><p>之后的运行只更新快照和报告，不会下单；已有持仓保持不动。可以随时恢复。</p>
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <div class="actions"><button class="btn" type="button" popovertarget="dlg-pause" popovertargetaction="hide">取消</button><button class="btn primary" type="submit">暂停</button></div>
-  </form></div>
-  {% else %}
-  <div class="dialog" id="dlg-resume" popover><form method="post" action="/ops/resume">
-    <h3>恢复交易？</h3><p>系统状态从 {{ ov.state }} 改为 RUNNING，下一次运行开始照常按策略下单。</p>
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    {% if ov.state == "KILLED" %}<label><input type="checkbox" name="after_kill" value="1" required> 我知道系统已紧急停止并清仓，确认恢复</label>{% endif %}
-    <div class="actions"><button class="btn" type="button" popovertarget="dlg-resume" popovertargetaction="hide">取消</button><button class="btn primary" type="submit">恢复</button></div>
-  </form></div>
-  {% endif %}
-  {% if allow_run %}
-  <div class="dialog" id="dlg-run" popover><form method="post" action="/ops/run">
-    <h3>立即运行一次？</h3><p>会按策略在 {{ ov.env }} 账户下单。运行在后台进行，可能需要几分钟；数据未就绪时最多重试约 30 分钟。</p>
-    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="1">
-    <div class="actions"><button class="btn" type="button" popovertarget="dlg-run" popovertargetaction="hide">取消</button><button class="btn primary" type="submit">运行</button></div>
-  </form></div>
-  {% endif %}
-  <div class="dialog" id="dlg-ack" popover><form method="post" action="/ops/ack">
-    <h3>确认当前余额？</h3><p>把交易所当前余额作为下一次核对的基准。只在你确认余额变化是外部原因（如 testnet 重置、手动转账）时使用。</p>
-    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="1">
-    <input type="text" name="note" maxlength="200" placeholder="备注（可选），例如：testnet 月度重置">
-    <div class="actions"><button class="btn" type="button" popovertarget="dlg-ack" popovertargetaction="hide">取消</button><button class="btn primary" type="submit">确认余额</button></div>
-  </form></div>
-  {% if ov.state != "KILLED" %}
-  <div class="dialog" id="dlg-kill" popover><form method="post" action="/ops/kill">
-    <h3>紧急停止并清仓</h3>
-    <ul><li>撤销策略的全部挂单</li><li>卖出全部受管资产（{% for a, q, d, dust, frozen in ov.positions if a != "USDT" %}{{ a }}{{ "、" if not loop.last }}{% else %}当前无{% endfor %}）</li><li>系统进入 KILLED，之后需要手动恢复</li></ul>
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label for="kill-word" style="display:block">输入 <b>{{ kill_word }}</b> 确认</label>
-    <input type="text" id="kill-word" name="confirm_text" required pattern="{{ kill_word }}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="{{ kill_word }}" data-kill-word="{{ kill_word }}">
-    <div class="actions"><button class="btn" type="button" popovertarget="dlg-kill" popovertargetaction="hide">取消</button><button class="btn danger" type="submit" data-kill-submit>紧急停止并清仓</button></div>
-  </form></div>
-  {% endif %}
-  {% if ov.kill_file %}
-  <div class="dialog" id="dlg-unkill" popover><form method="post" action="/ops/unkill">
-    <h3>删除 KILL 文件？</h3><p>取消尚未执行的紧急停止。</p>
-    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="1">
-    <div class="actions"><button class="btn" type="button" popovertarget="dlg-unkill" popovertargetaction="hide">取消</button><button class="btn primary" type="submit">删除</button></div>
-  </form></div>
-  {% endif %}
-
-  {% if ops_log %}
-  <div class="oplog tbl"><table>
-    <thead><tr><th>时间</th><th>操作</th><th>结果</th><th>说明</th></tr></thead>
-    <tbody>{% for r in ops_log %}<tr><td class="num">{{ utc(r.time) }}</td><td>{{ r.op }}</td><td><span class="badge {{ r.status }}">{{ r.status }}</span></td><td class="msg">{{ r.message }}</td></tr>{% endfor %}</tbody>
-  </table></div>
-  {% endif %}
-</section>
-
 <section id="records" class="card" aria-label="记录">
-  <div class="card-head"><h2>记录</h2></div>
-  <div class="tabs" role="tablist">
-    <button role="tab" aria-selected="true" aria-controls="tab-runs" id="t-runs" type="button">运行<span class="count">{{ ov.runs|length }}</span></button>
-    <button role="tab" aria-selected="false" aria-controls="tab-events" id="t-events" type="button">事件<span class="count">{{ ov.events|length }}</span></button>
-    <button role="tab" aria-selected="false" aria-controls="tab-fills" id="t-fills" type="button">成交<span class="count">{{ ov.fills|length }}</span></button>
+  <div class="card-head">
+    <h2>记录</h2>
+    <span class="spacer"></span>
+    <div class="tabs" role="tablist" aria-label="记录类型">
+      <button role="tab" aria-selected="false" aria-controls="tab-runs" id="t-runs" type="button" tabindex="-1">运行<span class="count">{{ ov.runs|length }}</span></button>
+      <button role="tab" aria-selected="false" aria-controls="tab-events" id="t-events" type="button" tabindex="-1">事件<span class="count">{{ ov.events|length }}</span></button>
+      <button role="tab" aria-selected="true" aria-controls="tab-fills" id="t-fills" type="button">成交<span class="count">{{ ov.fills|length }}</span></button>
+      <button role="tab" aria-selected="false" aria-controls="tab-ops" id="t-ops" type="button" tabindex="-1">操作日志<span class="count">{{ ops_log|length }}</span></button>
+    </div>
   </div>
-  <div role="tabpanel" id="tab-runs" aria-labelledby="t-runs" class="tbl"><table>
-    <thead><tr><th>运行</th><th>状态</th><th>开始</th><th>结束</th><th>错误</th></tr></thead>
-    <tbody>{% for r in ov.runs %}<tr><td>{{ r.run_id }}</td><td><span class="badge {{ r.status }}">{{ r.status }}</span></td><td class="num">{{ utc(r.started_at) }}</td><td class="num">{{ utc(r.finished_at) }}</td><td class="msg">{{ r.error or "" }}</td></tr>{% else %}<tr><td colspan="5" class="muted">还没有运行记录</td></tr>{% endfor %}</tbody>
+  <div role="tabpanel" id="tab-runs" aria-labelledby="t-runs" class="tbl" hidden><table>
+    <thead><tr><th>运行</th><th>状态</th><th>信号日</th><th>开始</th><th>结束</th><th>错误</th></tr></thead>
+    <tbody>{% for r in ov.runs %}<tr><td>{{ r.run_id }}</td><td><span class="badge {{ r.status }}">{{ r.status }}</span></td><td>{{ r.signal_date or "—" }}</td><td class="num">{{ utc(r.started_at) }}</td><td class="num">{{ utc(r.finished_at) }}</td><td class="msg">{{ r.error or "" }}</td></tr>{% else %}<tr><td colspan="6" class="muted">还没有运行记录</td></tr>{% endfor %}</tbody>
   </table></div>
   <div role="tabpanel" id="tab-events" aria-labelledby="t-events" hidden>
     <div class="chips" role="group" aria-label="按级别筛选">
-      <button type="button" data-level="" aria-pressed="true">全部</button><button type="button" data-level="WARN" aria-pressed="false">WARN</button><button type="button" data-level="CRITICAL" aria-pressed="false">CRITICAL</button><button type="button" data-level="INFO" aria-pressed="false">INFO</button>
+      <button type="button" data-level="" aria-pressed="true">全部</button><button type="button" data-level="CRITICAL" aria-pressed="false">CRITICAL</button><button type="button" data-level="WARN" aria-pressed="false">WARN</button><button type="button" data-level="INFO" aria-pressed="false">INFO</button>
     </div>
     <div class="tbl"><table>
       <thead><tr><th>时间</th><th>级别</th><th>类型</th><th>内容</th></tr></thead>
       <tbody>{% for e in ov.events %}<tr data-level="{{ e.level }}"><td class="num">{{ utc(e.time) }}</td><td><span class="badge {{ e.level }}">{{ e.level }}</span></td><td>{{ e.type }}</td><td class="msg">{{ event_summary(e) }}</td></tr>{% else %}<tr><td colspan="4" class="muted">还没有事件</td></tr>{% endfor %}</tbody>
     </table></div>
   </div>
-  <div role="tabpanel" id="tab-fills" aria-labelledby="t-fills" class="tbl" hidden><table>
+  <div role="tabpanel" id="tab-fills" aria-labelledby="t-fills" class="tbl"><table>
     <thead><tr><th>时间</th><th>交易对</th><th>方向</th><th class="n">价格</th><th class="n">数量</th><th class="n">成交额</th><th class="n">手续费</th></tr></thead>
-    <tbody>{% for f in ov.fills %}<tr><td class="num">{{ utc(f.time) }}</td><td>{{ f.symbol }}</td><td>{{ "买入" if f.side == "BUY" else "卖出" }}</td><td class="n">{{ f.price }}</td><td class="n">{{ f.qty }}</td><td class="n">{{ "{:,.2f}".format(f.quote_qty) }}</td><td class="n">{{ f.commission }} {{ f.commission_asset }}</td></tr>{% else %}<tr><td colspan="7" class="muted">还没有成交</td></tr>{% endfor %}</tbody>
+    <tbody>{% for f in ov.fills %}<tr><td class="num">{{ utc(f.time) }}</td><td>{{ f.symbol }}</td><td><span class="dir {{ f.side }}">{{ "买入" if f.side == "BUY" else "卖出" }}</span></td><td class="n">{{ f.price }}</td><td class="n">{{ f.qty }}</td><td class="n">{{ "{:,.2f}".format(f.quote_qty) }}</td><td class="n">{{ f.commission }} {{ f.commission_asset }}</td></tr>{% else %}<tr><td colspan="7" class="muted">还没有成交</td></tr>{% endfor %}</tbody>
   </table></div>
+  <div role="tabpanel" id="tab-ops" aria-labelledby="t-ops" class="tbl" hidden><table>
+    <thead><tr><th>时间</th><th>操作</th><th>结果</th><th>说明</th></tr></thead>
+    <tbody>{% for r in ops_log %}<tr><td class="num">{{ utc(r.time) }}</td><td>{{ r.op }}</td><td><span class="badge {{ r.status }}">{{ r.status }}</span></td><td class="msg">{{ r.message }}</td></tr>{% else %}<tr><td colspan="4" class="muted">管理界面启动以来还没有操作。每次操作也会写入 DASHBOARD_OP 事件。</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+</div>
+
+<aside class="col-side">
+<section id="ops" class="card" aria-label="操作">
+  <div class="card-head"><h2>操作</h2><span class="spacer"></span><span class="code">{{ ov.state }}</span></div>
+  <div class="op-list">
+    {% if ov.state == "RUNNING" %}
+    {% call op("暂停交易", "之后的运行只更新快照和报告，不下单。不撤单、不清仓。", "暂停", "/ops/pause", csrf) %}
+      <p>之后的运行只更新快照和报告，不会下单；已有持仓保持不动。可以随时恢复。</p>
+    {% endcall %}
+    {% else %}
+    {% call op("恢复交易", "当前" ~ state_label.get(ov.state, ov.state) ~ "。恢复后，下一次运行照常按策略下单。", "恢复", "/ops/resume", csrf) %}
+      <p>系统状态从 {{ ov.state }} 改为 RUNNING，下一次运行开始照常按策略下单。</p>
+      {% if ov.state == "KILLED" %}<label class="check-line"><input type="checkbox" name="after_kill" value="1" required> 我知道系统已紧急停止并清仓，确认恢复</label>{% endif %}
+    {% endcall %}
+    {% endif %}
+    {% if allow_run %}
+    {% call op("立即运行一次", "后台运行中，完成后自动刷新。" if busy else "与每天定时运行相同：更新行情、计算目标、按需下单。今天已调过仓时只更新快照。", "运行", "/ops/run", csrf, disabled=busy) %}
+      <p>会按策略在 {{ ov.env }} 账户下单。运行在后台进行，可能需要几分钟；数据未就绪时最多重试约 30 分钟。</p>
+      <input type="hidden" name="confirm" value="1">
+    {% endcall %}
+    {% endif %}
+    {% call op("确认当前余额", "出现无法解释的余额变化（如 testnet 月度重置）时，把当前余额作为新的核对基准。", "确认", "/ops/ack", csrf, disabled=busy, ok_label="确认余额") %}
+      <p>只在你确认余额变化是外部原因（如 testnet 重置、手动转账）时使用。</p>
+      <input type="hidden" name="confirm" value="1">
+      <label class="field">备注（可选）<input type="text" name="note" maxlength="200" placeholder="例如：testnet 月度重置"></label>
+    {% endcall %}
+  </div>
+</section>
+
+<section class="card danger-zone" aria-label="紧急停止">
+  <h2>紧急停止并清仓</h2>
+  {% if ov.state == "KILLED" %}
+  <p>系统已紧急停止。需要在上面"恢复交易"后才会重新下单。</p>
+  {% elif ov.kill_file %}
+  <p>已写入 KILL 文件，等待常驻进程执行。要取消，用页首的"删除 KILL 文件"。</p>
+  {% else %}
+  <p>撤销策略的全部挂单，卖出全部受管资产（{{ managed|join("、") if managed else "当前无" }}），系统进入 KILLED，之后需要手动恢复。</p>
+  {% if busy %}
+  <span class="btn danger-outline" aria-disabled="true">后台操作进行中</span>
+  {% else %}
+  <details class="kill">
+    <summary class="btn danger-outline">准备紧急停止…</summary>
+    <form method="post" action="/ops/kill">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label for="kill-word">输入 <b class="mono">{{ kill_word }}</b> 确认</label>
+      <input type="text" id="kill-word" name="confirm_text" required pattern="{{ kill_word }}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="{{ kill_word }}" data-kill-word="{{ kill_word }}">
+      <div class="actions"><button class="btn" type="button" data-close>取消</button><button class="btn danger" type="submit" data-kill-submit>紧急停止并清仓</button></div>
+    </form>
+  </details>
+  {% endif %}
+  {% endif %}
 </section>
 
 <section id="system" class="card" aria-label="系统">
   <div class="card-head"><h2>系统</h2></div>
   <dl class="kv">
-    <dt>常驻进程</dt><dd>{% if ov.daemon.alive %}<span class="badge DONE">运行中</span>{% else %}<span class="badge SKIPPED">未运行</span>{% endif %}{% if ov.daemon.seen %} <span class="muted">最后心跳 {{ utc(ov.daemon.seen) }}</span>{% endif %}</dd>
-    <dt>Telegram 通知</dt><dd><span class="badge {{ 'DONE' if tg_ok else 'SKIPPED' }}">{{ "已配置" if tg_ok else "未配置" }}</span></dd>
-    <dt>外部心跳</dt><dd><span class="badge {{ 'DONE' if hb_ok else 'SKIPPED' }}">{{ "已配置" if hb_ok else "未配置" }}</span></dd>
-    <dt>状态库备份</dt><dd>{% if ov.backup_enabled %}{{ ov.backups|length }} 份{% if ov.backups %} <span class="muted">最近 {{ ov.backups[-1].name }}</span>{% endif %}{% else %}已关闭{% endif %}</dd>
+    <dt>账户净值 USDT</dt><dd class="num">{{ "{:,.2f}".format(ov.nav) if ov.nav is not none else "—" }}</dd>
+    <dt>资金上限</dt><dd class="num">{{ "{:,.0f}".format(ov.max_capital) }} USDT</dd>
+    <dt>快照时间</dt><dd>{{ utc(ov.snapshot_time) }}</dd>
+    <dt>常驻进程</dt><dd>{% if ov.daemon.alive %}{{ "运行中" if ov.daemon.state == "running" else "等待中" }}{% else %}未运行{% endif %}{% if ov.daemon.alive and ov.daemon.next_run %} · 下次 {{ bj(ov.daemon.next_run) }}（北京）{% endif %}</dd>
+    <dt>状态库备份</dt><dd>{% if ov.backup_enabled %}{{ ov.backups|length }} 份{% if ov.backups %} · 最近 {{ ov.backups[-1].name }}{% endif %}{% else %}已关闭{% endif %}</dd>
     <dt>账户 / 策略</dt><dd>{{ ov.account_id }} · {{ ov.strategy_id }} · {{ ov.env }}</dd>
   </dl>
 </section>
+</aside>
+</div>
 </main>
-<footer>时间默认显示 UTC；"北京"标注的为北京时间（UTC+8）</footer>
+</div>
+
+<nav class="bottomnav" aria-label="分区（手机）">
+  <a href="#overview">概览</a><a href="#holdings">持仓</a><a href="#records">记录</a><a href="#ops">操作</a>
+</nav>
 </body>
 </html>

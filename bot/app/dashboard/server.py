@@ -46,7 +46,15 @@ from bot import paths
 from bot.app import ops
 from bot.app.daemon import alive_path
 from bot.app.dashboard import charts
-from bot.app.dashboard.data import BEIJING, Overview, build_overview, compare_holdings, event_summary
+from bot.app.dashboard.data import (
+    BEIJING,
+    Overview,
+    build_overview,
+    compare_holdings,
+    event_summary,
+    headline,
+    health_checks,
+)
 from bot.app.run_once import QUOTE, DailyRunner, RunDeps, _prices_for, managed_assets
 from bot.config import AppConfig
 from bot.data.store import MarketStore
@@ -245,7 +253,12 @@ def _auth_middleware(
 
 
 def _base_ctx(dash: Dashboard) -> dict[str, Any]:
-    return {"utc": _fmt_utc, "bj": _fmt_bj, "csrf": dash.csrf}
+    return {
+        "utc": _fmt_utc,
+        "bj": _fmt_bj,
+        "csrf": dash.csrf,
+        "min_trade": float(dash.cfg.rebalance.min_trade_usdt),
+    }
 
 
 def _chart_data(ov: Overview) -> dict[str, Any]:
@@ -279,9 +292,14 @@ def create_app(dash: Dashboard) -> Starlette:
 
     async def index(request: Request) -> Response:
         ov = await run_in_threadpool(overview)
+        tg_ok = bool(os.environ.get("TELEGRAM_BOT_TOKEN")) and bool(os.environ.get("TELEGRAM_CHAT_ID"))
+        hb_ok = bool(os.environ.get("HEARTBEAT_URL")) and cfg.notify.heartbeat_enabled
         ctx: dict[str, Any] = {
             **_base_ctx(dash),
             "ov": ov,
+            "hl": headline(ov),
+            "checks": health_checks(ov, telegram=tg_ok, heartbeat=hb_ok),
+            "dd_halt": cfg.risk.max_drawdown_halt,
             "chart_data": _chart_data(ov),
             "nav_chart": charts.nav_chart(ov.nav_history),
             "dd_chart": charts.drawdown_chart(ov.nav_history),
@@ -294,8 +312,6 @@ def create_app(dash: Dashboard) -> Starlette:
             "event_summary": event_summary,
             "regime_mode": cfg.regime.mode,
             "sma_period": cfg.regime.sma_period,
-            "tg_ok": bool(os.environ.get("TELEGRAM_BOT_TOKEN")) and bool(os.environ.get("TELEGRAM_CHAT_ID")),
-            "hb_ok": bool(os.environ.get("HEARTBEAT_URL")) and cfg.notify.heartbeat_enabled,
             "inline_live": None,
         }
         if request.query_params.get("live") == "1":  # 不开脚本时的后备：在页面里直接渲染实时持仓

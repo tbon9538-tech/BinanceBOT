@@ -1,4 +1,4 @@
-/* 管理界面的交互（D-080）。同源加载，不依赖任何外部库；不开脚本时页面仍然可用。
+/* 管理界面的交互（D-080；D-084 改版）。同源加载，不依赖任何外部库；不开脚本时页面仍然可用。
  * 图表数据来自页面内的 <script type="application/json" id="chart-data">；标签一律用 textContent 写入。 */
 (() => {
   "use strict";
@@ -55,19 +55,19 @@
 
   const SPECS = {
     nav: {
-      key: "nav", height: 190, label: "单位净值",
+      key: "nav", height: 160, label: "单位净值",
       series: [{ idx: 1, cls: "s1", dot: "s1f", key: "key-line", name: "单位净值", fmt: fmt.navu }],
       tick: (v, step) => v.toFixed(Math.max(2, Math.min(6, Math.ceil(-Math.log10(step))))),
     },
     dd: {
-      key: "nav", height: 96, label: "回撤", zeroTop: true, ticksN: 2,
+      key: "nav", height: 110, label: "回撤", zeroTop: true, ticksN: 2,
       series: [{ idx: 2, cls: "dd", dot: "ddf", key: "key-dd", name: "回撤", fmt: fmt.pct, area: true }],
       tick: (v, step) => (v * 100).toFixed(step * 100 < 1 ? 1 : 0) + "%",
     },
     regime: {
-      key: "regime", height: 318, label: "BTC 收盘价与均线", band: 3,
+      key: "regime", height: 280, label: "BTC 收盘价与均线", band: 3,
       series: [
-        { idx: 1, cls: "s1", dot: "s1f", key: "key-line", name: "收盘价", fmt: fmt.usd },
+        { idx: 1, cls: "price", dot: "pricef", key: "key-line ink", name: "收盘价", fmt: fmt.usd },
         { idx: 2, cls: "s2", dot: "s2f", key: "key-line s2", name: "均线", fmt: fmt.usd },
       ],
       tick: (v) => (v >= 1000 ? Math.round(v / 1000) + "K" : String(v)),
@@ -266,22 +266,23 @@
 
   // ---------- 分区导航高亮 ----------
   function initNav() {
-    const links = [...document.querySelectorAll(".subnav a")];
-    const map = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+    const links = [...document.querySelectorAll(".nav a, .bottomnav a")];
+    const ids = [...new Set(links.map((a) => a.getAttribute("href").slice(1)))];
     const seen = new Map();
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) seen.set(e.target.id, e.isIntersecting ? e.intersectionRatio : 0);
       let best = null, ratio = 0;
       for (const [id, r] of seen) if (r > ratio) { ratio = r; best = id; }
-      links.forEach((a) => a.setAttribute("aria-current", String(map.get(best) === a)));
+      links.forEach((a) => a.setAttribute("aria-current", String(a.getAttribute("href") === "#" + best)));
     }, { rootMargin: "-30% 0px -55% 0px", threshold: [0, 0.01, 0.5, 1] });
-    for (const id of map.keys()) { const s = document.getElementById(id); if (s) io.observe(s); }
+    for (const id of ids) { const s = document.getElementById(id); if (s) io.observe(s); }
   }
 
   // ---------- 记录页签与事件筛选 ----------
   function initTabs() {
     const tabs = [...document.querySelectorAll('[role="tab"]')];
-    function select(tab) {
+    function select(tab, remember) {
+      if (remember) store.set("dash-tab", tab.id);
       tabs.forEach((t) => {
         const on = t === tab;
         t.setAttribute("aria-selected", String(on));
@@ -290,12 +291,15 @@
       });
     }
     tabs.forEach((t, i) => {
-      t.addEventListener("click", () => select(t));
+      t.addEventListener("click", () => select(t, true));
       t.addEventListener("keydown", (e) => {
         const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-        if (d) { const nt = tabs[(i + d + tabs.length) % tabs.length]; select(nt); nt.focus(); }
+        if (d) { const nt = tabs[(i + d + tabs.length) % tabs.length]; select(nt, true); nt.focus(); }
       });
     });
+    const want = document.getElementById("toast") ? "t-ops" : store.get("dash-tab");
+    const initial = tabs.find((t) => t.id === want);
+    if (initial) select(initial, false);
     const chips = [...document.querySelectorAll(".chips [data-level]")];
     chips.forEach((c) => c.addEventListener("click", () => {
       chips.forEach((x) => x.setAttribute("aria-pressed", String(x === c)));
@@ -306,16 +310,12 @@
     }));
   }
 
-  // ---------- 操作：确认框、KILL 输入、后台操作轮询、结果提示 ----------
+  // ---------- 操作：就地展开的确认（<details>，不开脚本也能用）、KILL 输入、后台操作轮询、结果提示 ----------
   function initOps() {
-    const supportsPopover = typeof HTMLElement !== "undefined" && "popover" in HTMLElement.prototype;
-    if (!supportsPopover) {  // 旧浏览器：对话框改成点击展开的普通表单
-      document.querySelectorAll("[popover]").forEach((d) => { d.hidden = true; });
-      document.querySelectorAll("[popovertarget]").forEach((b) => b.addEventListener("click", () => {
-        const d = document.getElementById(b.getAttribute("popovertarget"));
-        if (d) d.hidden = b.getAttribute("popovertargetaction") === "hide" ? true : !d.hidden;
-      }));
-    }
+    document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => {
+      const d = b.closest("details");
+      if (d) { d.open = false; d.querySelector("summary")?.focus(); }
+    }));
     const word = document.querySelector("[data-kill-word]");
     const submit = document.querySelector("[data-kill-submit]");
     if (word && submit) {
@@ -359,7 +359,13 @@
     const btn = document.getElementById("theme-btn");
     if (btn) {
       btn.hidden = false;
-      const label = () => { const t = store.get("dash-theme") || "auto"; btn.title = "主题：" + THEME_LABEL[t] + "（点击切换）"; };
+      const text = btn.querySelector("[data-theme-label]");
+      const label = () => {
+        const t = store.get("dash-theme") || "auto";
+        btn.title = "主题：" + THEME_LABEL[t] + "（点击切换）";
+        btn.setAttribute("aria-label", "主题：" + THEME_LABEL[t] + "，点击切换");
+        if (text) text.textContent = THEME_LABEL[t];
+      };
       label();
       btn.addEventListener("click", () => {
         const cur = store.get("dash-theme") || "auto";
@@ -373,7 +379,7 @@
     setInterval(() => {
       const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
       let open = false;
-      try { open = Boolean(document.querySelector(":popover-open")); } catch { open = false; }
+      open = Boolean(document.querySelector("details.op[open], details.kill[open], details.inline-confirm[open]"));
       if (document.visibilityState === "visible" && !typing && !open) location.reload();
     }, 300000);
   }

@@ -118,6 +118,106 @@ class Overview:
         r = self.regime
         return r.close / r.sma - 1 if r is not None and r.sma else None
 
+    @property
+    def capital(self) -> float | None:
+        """策略资金 = min(净值, 资金上限)，与每日流程一致。"""
+        return min(float(self.nav), float(self.max_capital)) if self.nav is not None else None
+
+    @property
+    def held_value(self) -> float | None:
+        """持币市值（USDT）：快照里的仓位比例 × 净值。"""
+        return (
+            float(self.gross) * float(self.nav) if self.gross is not None and self.nav is not None else None
+        )
+
+    @property
+    def exposure_of_capital(self) -> float | None:
+        """持币市值占策略资金（与"持仓：目标 vs 实际"同一口径，D-084）。"""
+        held, cap = self.held_value, self.capital
+        return held / cap if held is not None and cap else None
+
+
+@dataclass(frozen=True)
+class Headline:
+    """页首的一句话状态（D-084）：最需要处理的情况排在前面。"""
+
+    tone: str  # good / warning / critical
+    title: str
+    sub: str
+
+
+def headline(ov: Overview) -> Headline:
+    if ov.state == "KILLED":
+        return Headline("critical", "已紧急停止", "挂单已撤、受管资产已卖出；需要手动恢复交易")
+    if ov.state == "HALTED":
+        return Headline("critical", "已熔断", ov.state_reason or "风控停止了交易；确认原因后手动恢复")
+    if ov.kill_file:
+        return Headline("critical", "等待紧急停止", "KILL 文件存在，常驻进程检测到后会撤单并清仓")
+    if ov.state == "PAUSED":
+        return Headline("warning", "已暂停交易", "定时运行照常更新快照和报告，但不下单")
+    if not ov.daemon.alive:
+        return Headline("warning", "定时运行未进行", "常驻进程没有运行，到点不会自动运行")
+    if ov.stale:
+        return Headline("warning", "需要检查", "超过 26 小时没有新的运行，请检查常驻进程日志")
+    if ov.daemon.state == "running":
+        return Headline("good", "运行正常", "定时运行正在进行")
+    nxt = ov.daemon.next_run
+    return Headline("good", "运行正常", f"下次定时运行 {_bj(nxt)}（北京）" if nxt else "常驻进程运行中")
+
+
+@dataclass(frozen=True)
+class Check:
+    label: str
+    value: str
+    level: str  # ok / off（未配置或已关闭）/ bad
+
+
+def health_checks(ov: Overview, *, telegram: bool, heartbeat: bool) -> list[Check]:
+    """页首右侧的检查项。图标与文字一起表达状态，不只靠颜色。"""
+    d = ov.daemon
+    if d.alive and d.seen is not None:
+        doing = "运行中" if d.state == "running" else "等待中"
+        daemon = Check("常驻进程", f"{doing} · 心跳 {_ago(ov.now - d.seen)}", "ok")
+    else:
+        daemon = Check("常驻进程", "未运行" + (f" · 最后心跳 {_bj(d.seen)}（北京）" if d.seen else ""), "bad")
+    r = ov.last_run
+    if r is None:
+        run = Check("最近运行", "还没有运行", "bad")
+    else:
+        run = Check(
+            "最近运行",
+            f"{r.status} · {r.run_date}" + (" · 已超过 26 小时" if ov.stale else ""),
+            "bad" if ov.stale or r.status == "FAILED" else "ok",
+        )
+    if ov.backup_enabled:
+        backup = Check(
+            "状态库备份",
+            f"{len(ov.backups)} 份" if ov.backups else "还没有备份",
+            "ok" if ov.backups else "off",
+        )
+    else:
+        backup = Check("状态库备份", "已关闭", "off")
+    return [
+        daemon,
+        run,
+        backup,
+        Check("Telegram 通知", "已配置" if telegram else "未配置", "ok" if telegram else "off"),
+        Check("外部心跳", "已配置" if heartbeat else "未配置", "ok" if heartbeat else "off"),
+    ]
+
+
+def _bj(t: datetime) -> str:
+    return (t + BEIJING).strftime("%m-%d %H:%M")
+
+
+def _ago(dt: timedelta) -> str:
+    s = max(0, int(dt.total_seconds()))
+    if s < 60:
+        return f"{s} 秒前"
+    if s < 3600:
+        return f"{s // 60} 分钟前"
+    return f"{s // 3600} 小时前"
+
 
 def nav_history(repo: StateRepo, cfg: AppConfig) -> list[NavPoint]:
     """每天最后一个 POST_TRADE 快照的单位净值（没有 POST_TRADE 的日子用当天最后一个快照）与回撤。"""

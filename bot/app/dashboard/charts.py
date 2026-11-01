@@ -87,7 +87,7 @@ def drawdown_chart(points: Sequence[NavPoint]) -> Markup:
 
 
 def regime_chart(points: Sequence[RegimePoint]) -> Markup:
-    """BTC 收盘价（系列 1）与均线（系列 2）；Risk-On 的日子用浅色背景标出。"""
+    """BTC 收盘价（墨色）与均线（系列 2）；Risk-On 的日子用浅色背景标出。"""
     if not points:
         return _empty("还没有大盘数据（第一次运行或同步行情后出现）。")
     xs = _xs(len(points))
@@ -102,5 +102,5 @@ def regime_chart(points: Sequence[RegimePoint]) -> Markup:
     )
     close = _path(xs, [b - p.close * k for p in points])
     sma = _path(xs, [b - p.sma * k if p.sma is not None else None for p in points])
-    body = f'{bands}<path class="s2" d="{sma}"/><path class="s1" d="{close}"/>'
+    body = f'{bands}<path class="s2" d="{sma}"/><path class="price" d="{close}"/>'
     return _frame(body, "BTC 收盘价与均线", H, points[0].day, points[-1].day, f"{lo:,.0f} ～ {hi:,.0f}")
