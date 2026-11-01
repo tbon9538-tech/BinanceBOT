@@ -130,6 +130,10 @@ class TrendSleeveConfig(_SleeveBase):
 
     type: Literal["trend"]
     symbols: list[str] = Field(min_length=1)
+    # 单资产趋势过滤（研究 R4）：none = 只跟随大盘过滤；own_sma = 另外要求资产自身对 SMA 的带缓冲状态为 Risk-On
+    asset_filter: Literal["none", "own_sma"] = "none"
+    asset_sma_period: int = Field(100, ge=2)
+    asset_buffer: float = Field(0.02, ge=0, lt=1)
 
     @field_validator("symbols")
     @classmethod

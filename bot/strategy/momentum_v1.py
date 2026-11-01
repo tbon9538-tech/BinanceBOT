@@ -16,7 +16,7 @@ from bot.domain.types import Regime
 from bot.strategy.ctrend import CtrendModel
 from bot.strategy.indicators import MarketPanel
 from bot.strategy.portfolio import combine_sleeves
-from bot.strategy.regime import regime_with_exposure
+from bot.strategy.regime import regime_series, regime_with_exposure
 from bot.strategy.sleeves import core_target, rank_universe, satellite_target
 from bot.strategy.smoothing import Overrides, smoothed_target
 
@@ -61,6 +61,17 @@ class MomentumV1:
         self._sleeves = cfg.enabled_sleeves()
         self._raw_cache: dict[tuple[str, pd.Timestamp, frozenset[str]], dict[str, float]] = {}
         self._universe_cache: dict[pd.Timestamp, list[str]] = {}
+        # 单资产趋势过滤（R4）：袖子 → 资产 → 每天是否处于自身的 Risk-On
+        self._asset_on: dict[str, dict[str, pd.Series]] = {
+            name: {
+                sym: regime_series(panel.close[sym], s.asset_sma_period, s.asset_buffer)["state"]
+                == Regime.RISK_ON.value
+                for sym in s.symbols
+                if sym in panel.columns
+            }
+            for name, s in self._sleeves.items()
+            if isinstance(s, TrendSleeveConfig) and s.asset_filter == "own_sma"
+        }
         self._ctrend: dict[str, CtrendModel] = {
             name: CtrendModel(panel, s, lambda d, ex=tuple(s.exclude_symbols): self.universe(d, ex))
             for name, s in self._sleeves.items()
@@ -97,7 +108,9 @@ class MomentumV1:
             scfg = self._sleeves[sleeve]
             on = self.risk_on(d)
             if isinstance(scfg, TrendSleeveConfig):
-                out = core_target(self.panel, scfg, d, on)
+                flt = self._asset_on.get(sleeve)
+                asset_on = {sym: bool(s.at[d]) for sym, s in flt.items()} if flt is not None else None
+                out = core_target(self.panel, scfg, d, on, asset_on)
             else:
                 assert isinstance(scfg, XsMomentumSleeveConfig)
                 uni = self.universe(d, tuple(scfg.exclude_symbols)) if on else []

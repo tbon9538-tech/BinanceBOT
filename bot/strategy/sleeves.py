@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 
 import numpy as np
 import pandas as pd
@@ -21,15 +21,25 @@ BLEND_LOOKBACKS = (14, 28, 56)
 
 
 def core_target(
-    panel: MarketPanel, cfg: TrendSleeveConfig, t: pd.Timestamp, risk_on: bool
+    panel: MarketPanel,
+    cfg: TrendSleeveConfig,
+    t: pd.Timestamp,
+    risk_on: bool,
+    asset_on: Mapping[str, bool] | None = None,
 ) -> dict[str, float]:
-    """核心袖子：Risk-On 时 w = min(max_gross, target_vol / σ)；多个资产时风险等分（D-050）。"""
+    """核心袖子：Risk-On 时 w = min(max_gross, target_vol / σ)；多个资产时风险等分（D-050）。
+
+    asset_on 为单资产趋势过滤的结果（R4，asset_filter: own_sma）：未通过的资产不持有，
+    它那一份风险预算留作现金，n 仍按全部核心资产计算。
+    """
     if not risk_on:
         return {}
     n = len(cfg.symbols)
     out: dict[str, float] = {}
     vol = panel.vol(cfg.vol_lookback)
     for sym in cfg.symbols:
+        if asset_on is not None and not asset_on.get(sym, False):
+            continue
         if sym not in vol.columns:
             log.error("核心资产 %s 不在面板中", sym)
             continue
