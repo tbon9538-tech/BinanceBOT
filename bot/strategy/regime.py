@@ -43,3 +43,39 @@ def regime_series(
         {"state": states, "switched_on": on_flags, "switched_off": off_flags, "sma": m, "close": c},
         index=close.index,
     )
+
+
+def regime_with_exposure(
+    close: pd.Series,
+    sma_period: int,
+    buffer: float,
+    *,
+    mode: str = "sma",
+    tsmom_lookback: int = 90,
+    ensemble_periods: tuple[int, ...] = (50, 100, 150, 200),
+) -> pd.DataFrame:
+    """在 regime_series 的基础上增加 exposure 列（总仓位乘数）。
+
+    - sma / tsmom：Risk-On 时 1.0，Risk-Off 时 0.0（与原规则完全一致）；
+    - ensemble（研究 R2）：对每条均线分别运行同一带缓冲的状态机，exposure = 处于 Risk-On 的比例；
+      exposure > 0 视为 RISK_ON，切换标记按 exposure 是否从 0 变为正数（或反之）计算。
+    """
+    if mode != "ensemble":
+        df = regime_series(close, sma_period, buffer, mode=mode, tsmom_lookback=tsmom_lookback)
+        df["exposure"] = (df["state"] == Regime.RISK_ON.value).astype("float64")
+        return df
+    parts = [regime_series(close, p, buffer)["state"] == Regime.RISK_ON.value for p in ensemble_periods]
+    exposure = pd.concat(parts, axis=1).mean(axis=1).astype("float64")
+    on = exposure > 0
+    prev = on.shift(1, fill_value=False)
+    return pd.DataFrame(
+        {
+            "state": np.where(on, Regime.RISK_ON.value, Regime.RISK_OFF.value),
+            "switched_on": (on & ~prev).to_numpy(),
+            "switched_off": (~on & prev).to_numpy(),
+            "sma": np.nan,
+            "close": close.to_numpy(dtype="float64"),
+            "exposure": exposure.to_numpy(),
+        },
+        index=close.index,
+    )

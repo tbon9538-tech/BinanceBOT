@@ -15,7 +15,7 @@ from bot.config import AppConfig, TrendSleeveConfig, XsMomentumSleeveConfig
 from bot.domain.types import Regime
 from bot.strategy.indicators import MarketPanel
 from bot.strategy.portfolio import combine_sleeves
-from bot.strategy.regime import regime_series
+from bot.strategy.regime import regime_with_exposure
 from bot.strategy.sleeves import core_target, rank_universe, satellite_target
 from bot.strategy.smoothing import Overrides, smoothed_target
 
@@ -47,13 +47,21 @@ class MomentumV1:
         rc = cfg.regime
         if rc.symbol not in panel.columns:
             raise ValueError(f"面板中没有大盘过滤标的 {rc.symbol}")
-        self.regime = regime_series(
-            panel.close[rc.symbol], rc.sma_period, rc.buffer, mode=rc.mode, tsmom_lookback=rc.tsmom_lookback
+        self.regime = regime_with_exposure(
+            panel.close[rc.symbol],
+            rc.sma_period,
+            rc.buffer,
+            mode=rc.mode,
+            tsmom_lookback=rc.tsmom_lookback,
+            ensemble_periods=tuple(rc.ensemble_periods),
         )
         self._switch_on_dates = pd.DatetimeIndex(self.regime.index[self.regime["switched_on"].to_numpy()])
         self._sleeves = cfg.enabled_sleeves()
         self._raw_cache: dict[tuple[str, pd.Timestamp, frozenset[str]], dict[str, float]] = {}
         self._universe_cache: dict[pd.Timestamp, list[str]] = {}
+
+    def exposure(self, d: pd.Timestamp) -> float:
+        return float(self.regime.at[d, "exposure"])
 
     def risk_on(self, d: pd.Timestamp) -> bool:
         return bool(self.regime.at[d, "state"] == Regime.RISK_ON.value)
@@ -87,6 +95,9 @@ class MomentumV1:
                 assert isinstance(scfg, XsMomentumSleeveConfig)
                 uni = self.universe(d, tuple(scfg.exclude_symbols)) if on else []
                 out = satellite_target(self.panel, scfg, d, on, uni, blocked)
+            e = self.exposure(d)
+            if e < 1.0:  # 集成模式：按处于 Risk-On 的均线比例缩放（sma / tsmom 模式下 e 只取 0 或 1）
+                out = {k: w * e for k, w in out.items()}
         self._raw_cache[key] = out
         return out
 

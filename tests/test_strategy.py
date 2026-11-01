@@ -224,3 +224,28 @@ def test_smoothing_weekly_uses_last_rebalance_day() -> None:
         overrides=Overrides(),
     )
     assert out == {"A": 11.0}
+
+
+def test_regime_exposure_sma_mode_matches_states() -> None:
+    from bot.strategy.regime import regime_with_exposure
+
+    close = pd.Series(
+        geometric(300, 0.003) + geometric(100, -0.01, 240.0), index=pd.date_range("2023-01-01", periods=400)
+    )
+    df = regime_with_exposure(close, 100, 0.02)
+    assert ((df["exposure"] == 1.0) == (df["state"] == "RISK_ON")).all()
+    pd.testing.assert_series_equal(df["state"], regime_series(close, 100, 0.02)["state"])
+
+
+def test_regime_exposure_ensemble_fractions() -> None:
+    from bot.strategy.regime import regime_with_exposure
+
+    close = pd.Series(
+        geometric(300, 0.003) + geometric(100, -0.01, 240.0), index=pd.date_range("2023-01-01", periods=400)
+    )
+    df = regime_with_exposure(close, 100, 0.02, mode="ensemble", ensemble_periods=(50, 100, 150, 200))
+    assert set(df["exposure"].round(2).unique()) <= {0.0, 0.25, 0.5, 0.75, 1.0}
+    assert df["exposure"].iloc[299] == 1.0  # 长期上涨后全部均线都在 Risk-On
+    assert ((df["exposure"] > 0) == (df["state"] == "RISK_ON")).all()
+    on_switches = int(df["switched_on"].sum())
+    assert on_switches >= 1
