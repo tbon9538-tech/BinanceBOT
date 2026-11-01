@@ -3,6 +3,7 @@
 - 研究类命令（backtest / experiment / walkforward / bootstrap）只能通过 HoldoutGuard 读取数据，
   `date >= holdout_start` 的行一律被过滤，请求的结束日期落在保留集内则直接报错。
 - 只有 `holdout --final` 可以读取保留集；每次运行都追加记录到 doc/research/holdout_runs.log。
+- 记录按保留集起点区分（D-085）：2026-11-02 起保留集改为从 2026-11-01 开始，旧记录没有起点字段，按 2025-07-01 处理。
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import pandas as pd
 from bot.domain.errors import BotError
 
 DEFAULT_HOLDOUT_LOG = Path("doc/research/holdout_runs.log")
+LEGACY_HOLDOUT_START = "2025-07-01"  # 没有 holdout_start 字段的旧记录属于第一段保留集（D-085）
 
 
 class HoldoutViolation(BotError):
@@ -60,19 +62,25 @@ class HoldoutLog:
     def __init__(self, path: Path = DEFAULT_HOLDOUT_LOG) -> None:
         self.path = path
 
-    def previous_runs(self) -> list[dict[str, Any]]:
+    def previous_runs(self, holdout_start: date | None = None) -> list[dict[str, Any]]:
+        """全部记录；给出 holdout_start 时只返回这一段保留集的记录。"""
         if not self.path.exists():
             return []
         lines = self.path.read_text(encoding="utf-8").splitlines()
-        return [json.loads(line) for line in lines if line.strip()]
+        runs = [json.loads(line) for line in lines if line.strip()]
+        if holdout_start is None:
+            return runs
+        return [r for r in runs if r.get("holdout_start", LEGACY_HOLDOUT_START) == holdout_start.isoformat()]
 
-    def authorize(self, *, final: bool, confirm: date | None, today: date, not_first_run: bool) -> bool:
-        """检查 `holdout --final` 的启动条件。返回 True 表示这是首次运行。"""
+    def authorize(
+        self, *, final: bool, confirm: date | None, today: date, not_first_run: bool, holdout_start: date
+    ) -> bool:
+        """检查 `holdout --final` 的启动条件。返回 True 表示这是当前这段保留集的首次运行。"""
         if not final:
             raise HoldoutViolation("读取保留集必须显式加 --final")
         if confirm != today:
             raise HoldoutViolation(f"--confirm 必须等于当天日期 {today.isoformat()}")
-        first = not self.previous_runs()
+        first = not self.previous_runs(holdout_start)
         if not first and not not_first_run:
             raise HoldoutViolation(
                 "保留集已经运行过。再次运行必须加 --i-know-this-is-not-the-first-run，"
@@ -80,10 +88,19 @@ class HoldoutLog:
             )
         return first
 
-    def append(self, *, git_commit: str, config_hash: str, summary: dict[str, Any], first_run: bool) -> None:
+    def append(
+        self,
+        *,
+        git_commit: str,
+        config_hash: str,
+        summary: dict[str, Any],
+        first_run: bool,
+        holdout_start: date,
+    ) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         record = {
             "time": datetime.now(UTC).isoformat(timespec="seconds"),
+            "holdout_start": holdout_start.isoformat(),
             "git_commit": git_commit,
             "config_hash": config_hash,
             "first_run": first_run,

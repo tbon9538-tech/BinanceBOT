@@ -195,7 +195,7 @@ pattern_exceptions: [JUP]                                  # 命中正则但不�
 
 ### 3.6 保留集守卫
 
-- 配置项 `research.holdout_start: "2025-07-01"`。
+- 配置项 `research.holdout_start: "2025-07-01"`（2026-11-02 起为 `"2026-11-01"`，见 v3 实现阶段修订 #7、D-085）。
 - 研究类命令包括 `backtest`、`experiment`、`walkforward`、`bootstrap`。它们读取 K 线时，数据层必须过滤掉 `open_time ≥ holdout_start` 的行。
 - 命令的 `--end` 参数大于等于 `holdout_start` 时，直接报错退出。
 - 只有 `python -m bot holdout --final --confirm <当日日期>` 可以读取保留集。每次运行都追加记录到 `doc/research/holdout_runs.log`，内容包括时间、git commit、配置哈希和结果摘要。日志里已有记录时，再次运行必须额外加 `--i-know-this-is-not-the-first-run`，并在报告中醒目标注"非首次运行"。
@@ -1149,3 +1149,4 @@ class Transfer(Protocol):           # 第二阶段：现货 ↔ U 本位合约�
 | 4 | §5.7 实盘流程未接入 ATR 止损：开启时报错（D-065） | E6 结论为关闭 |
 | 5 | §13 提现权限检查已实现（`/sapi/v1/account/apiRestrictions`，缺字段即拒绝，D-061） | — |
 | 6 | 研究结论：卫星回看期 28 → 21、两个袖子目标波动 0.30 → 0.35，其余保留默认；保留集检验夏普 0.17，触发"不进入实盘"规则（`doc/research/log.md`） | M3、M4 |
+| 7 | §3.6、§10.1 研究窗口重新划分：第一段保留集（2025-07-01 ～ 2026-10-31）已用过，并入研究集（`backtest.end: 2026-10-31`）；`research.holdout_start` 改为 `2026-11-01`，之后的行情是新保留集；保留集运行记录按起点区分（D-085） | 用户 2026-11-02 选择 Q16 方案 B |

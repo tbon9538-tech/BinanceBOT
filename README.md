@@ -43,14 +43,14 @@ uv run python -m bot assets review  # 待审核资产清单与草稿（doc/asset
 ## 4. 回测与研究
 
 ```bash
-uv run python -m bot backtest --name my_run          # 当前配置，2020-01-01 ～ 2025-06-30，报告在 reports/my_run/
+uv run python -m bot backtest --name my_run          # 当前配置，2020-01-01 ～ 2026-10-31，报告在 reports/my_run/
 uv run python -m bot experiment --id E3a              # 运行 doc/research/experiments.yaml 中的预注册实验
 uv run python -m bot walkforward                      # 只在目标波动与核心权重上选择的 walk-forward
 uv run python -m bot bootstrap                        # 最大回撤的 block bootstrap 分布
 uv run python -m bot dsr                              # Deflated Sharpe Ratio（试验数取 doc/research/trials.csv）
 ```
 
-研究命令**强制过滤 2025-07-01 之后的保留集**（spec §3.6）。保留集只能用 `holdout --final --confirm <当天日期>` 运行，且已于 2026-11-01 运行过一次。研究规则见 [doc/dev_plan.md](doc/dev_plan.md) §4，过程与结论见 [doc/research/log.md](doc/research/log.md)。
+研究命令**强制过滤保留集**（spec §3.6）。第一段保留集（2025-07-01 ～ 2026-10-31）已于 2026-11-01 运行过一次，2026-11-02 起并入研究集；**新保留集从 2026-11-01 开始**，研究命令读不到（Q16、D-085）。保留集只能用 `holdout --final --confirm <当天日期>` 运行。研究规则见 [doc/dev_plan.md](doc/dev_plan.md) §4，过程与结论见 [doc/research/log.md](doc/research/log.md)。
 
 ## 5. testnet / demo 运行
 

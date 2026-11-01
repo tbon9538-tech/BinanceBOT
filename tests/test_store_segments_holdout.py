@@ -95,17 +95,56 @@ def test_holdout_guard_filters_and_asserts() -> None:
 def test_holdout_log_authorization(tmp_path: Path) -> None:
     log = HoldoutLog(tmp_path / "holdout_runs.log")
     today = date(2026, 12, 1)
+    kw = {"holdout_start": HOLDOUT}
     with pytest.raises(HoldoutViolation, match="--final"):
-        log.authorize(final=False, confirm=today, today=today, not_first_run=False)
+        log.authorize(final=False, confirm=today, today=today, not_first_run=False, **kw)
     with pytest.raises(HoldoutViolation, match="--confirm"):
-        log.authorize(final=True, confirm=today - timedelta(days=1), today=today, not_first_run=False)
-    assert log.authorize(final=True, confirm=today, today=today, not_first_run=False) is True
-    log.append(git_commit="abc", config_hash="h", summary={"sharpe": 1.0}, first_run=True)
+        log.authorize(final=True, confirm=today - timedelta(days=1), today=today, not_first_run=False, **kw)
+    assert log.authorize(final=True, confirm=today, today=today, not_first_run=False, **kw) is True
+    log.append(git_commit="abc", config_hash="h", summary={"sharpe": 1.0}, first_run=True, **kw)
     rec = json.loads(log.path.read_text(encoding="utf-8").splitlines()[0])
-    assert rec["git_commit"] == "abc" and rec["first_run"] is True
+    assert (
+        rec["git_commit"] == "abc"
+        and rec["first_run"] is True
+        and rec["holdout_start"] == HOLDOUT.isoformat()
+    )
     with pytest.raises(HoldoutViolation, match="已经运行过"):
-        log.authorize(final=True, confirm=today, today=today, not_first_run=False)
-    assert log.authorize(final=True, confirm=today, today=today, not_first_run=True) is False
+        log.authorize(final=True, confirm=today, today=today, not_first_run=False, **kw)
+    assert log.authorize(final=True, confirm=today, today=today, not_first_run=True, **kw) is False
+
+
+def test_holdout_runs_are_counted_per_holdout_period(tmp_path: Path) -> None:
+    """D-085：旧记录（没有 holdout_start 字段）属于 2025-07-01 那一段；新保留集重新算首次运行。"""
+    path = tmp_path / "holdout_runs.log"
+    path.write_text(
+        json.dumps({"time": "2026-11-01T13:59:08+00:00", "first_run": True}) + "\n", encoding="utf-8"
+    )
+    log = HoldoutLog(path)
+    today = date(2027, 6, 1)
+    with pytest.raises(HoldoutViolation, match="已经运行过"):
+        log.authorize(
+            final=True, confirm=today, today=today, not_first_run=False, holdout_start=date(2025, 7, 1)
+        )
+    new = date(2026, 11, 1)
+    assert (
+        log.authorize(final=True, confirm=today, today=today, not_first_run=False, holdout_start=new) is True
+    )
+    assert len(log.previous_runs()) == 1 and log.previous_runs(new) == []
+
+
+def test_repo_holdout_log_and_config_follow_d084() -> None:
+    """仓库里的真实记录：第一段保留集已用过；新保留集（2026-11-01 起）还没有运行过。只读，不运行保留集。"""
+    from bot.config import load_config
+    from tests.conftest import CONFIG_PATH
+
+    cfg = load_config(CONFIG_PATH)
+    assert cfg.research.holdout_start == date(2026, 11, 1) and cfg.backtest.end == date(2026, 10, 31)
+    log = HoldoutLog(Path(__file__).resolve().parents[1] / "doc" / "research" / "holdout_runs.log")
+    assert len(log.previous_runs(date(2025, 7, 1))) == 1
+    assert log.previous_runs(cfg.research.holdout_start) == []
+    HoldoutGuard(cfg.research.holdout_start).check_end(date(2026, 10, 31))
+    with pytest.raises(HoldoutViolation):
+        HoldoutGuard(cfg.research.holdout_start).check_end(date(2026, 11, 1))
 
 
 def test_segments_split_on_gap_over_seven_days() -> None:

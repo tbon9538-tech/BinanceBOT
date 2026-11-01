@@ -200,6 +200,7 @@ def _holdout_checks(cfg: AppConfig, args: argparse.Namespace) -> None:
             confirm=date.fromisoformat(args.confirm) if args.confirm else None,
             today=datetime.now(UTC).date(),
             not_first_run=args.i_know_this_is_not_the_first_run,
+            holdout_start=cfg.research.holdout_start,
         )
 
 

@@ -185,7 +185,7 @@ def cmd_holdout(cfg: AppConfig, args: argparse.Namespace) -> int:
     from bot.strategy.indicators import MarketPanel, column_symbol
 
     log_ = HoldoutLog()
-    first_run = not log_.previous_runs()
+    first_run = not log_.previous_runs(cfg.research.holdout_start)
     store = MarketStore(paths.MARKET_DB)
     assets = load_assets(cfg.universe.assets_file)
     allowed = approx_approved(store.symbol_meta(), assets)
@@ -231,6 +231,7 @@ def cmd_holdout(cfg: AppConfig, args: argparse.Namespace) -> int:
         config_hash=config_hash(run_cfg),
         summary={k: summ[k] for k in keys} | {"start": str(start), "end": str(end)},
         first_run=first_run,
+        holdout_start=cfg.research.holdout_start,
     )
     _print_summary(title, summ)
     print(f"报告：{doc / 'summary.md'}；运行记录已追加到 {log_.path}")

@@ -38,7 +38,7 @@ def test_bad_config_returns_config_error(tmp_path, capsys) -> None:  # type: ign
 
 
 def test_research_command_end_in_holdout_is_rejected(capsys) -> None:  # type: ignore[no-untyped-def]
-    assert main(["--config", str(CONFIG_PATH), "backtest", "--end", "2025-07-01"]) == EXIT_HOLDOUT_VIOLATION
+    assert main(["--config", str(CONFIG_PATH), "backtest", "--end", "2026-11-01"]) == EXIT_HOLDOUT_VIOLATION
     assert "保留集" in capsys.readouterr().err
 
 

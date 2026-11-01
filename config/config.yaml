@@ -94,10 +94,11 @@ backtest:
   delist_haircut: 0.5         # 【待研究】
   usdt_yield_annual: 0.04     # 只用于报告"扣除 USDT 理财收益"的参考夏普（spec §1.2），假设值，不影响交易与回测
   start: "2020-01-01"
-  end: "2025-06-30"           # 必须早于 research.holdout_start
+  end: "2026-10-31"           # 必须早于 research.holdout_start（D-085：研究集延长到 2026-10-31）
 
 research:
-  holdout_start: "2025-07-01"
+  holdout_start: "2026-11-01"  # D-085：第一段保留集（2025-07-01 起）已在 2026-11-01 用过并并入研究集；
+                              # 之后的行情是新的保留集，研究命令读不到，只用于前向检验
 
 notify:
   telegram_enabled: true      # 只发通知，不接收命令（Q5 选 C）；没有配置 token 时自动降级为只写日志

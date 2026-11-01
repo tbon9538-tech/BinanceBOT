@@ -100,12 +100,12 @@ def test_threshold_mode_values(base_cfg, write_yaml) -> None:  # type: ignore[no
 
 
 def test_backtest_end_must_precede_holdout(base_cfg, write_yaml) -> None:  # type: ignore[no-untyped-def]
-    base_cfg["backtest"]["end"] = "2025-07-01"
+    base_cfg["backtest"]["end"] = "2026-11-01"
     _expect_error(write_yaml, base_cfg, "holdout_start")
 
 
 def test_backtest_start_before_end(base_cfg, write_yaml) -> None:  # type: ignore[no-untyped-def]
-    base_cfg["backtest"]["start"] = "2025-06-30"
+    base_cfg["backtest"]["start"] = "2026-10-31"  # 不早于 backtest.end
     _expect_error(write_yaml, base_cfg, "backtest.start")
 
 

@@ -249,7 +249,7 @@ class BacktestConfig(_Model):
         0.04, ge=0, lt=0.5
     )  # 只用于报告"扣除 USDT 理财收益"的参考夏普（spec §1.2）
     start: date = date(2020, 1, 1)
-    end: date = date(2025, 6, 30)
+    end: date = date(2026, 10, 31)
 
     @model_validator(mode="after")
     def _range(self) -> BacktestConfig:
@@ -259,7 +259,7 @@ class BacktestConfig(_Model):
 
 
 class ResearchConfig(_Model):
-    holdout_start: date = date(2025, 7, 1)
+    holdout_start: date = date(2026, 11, 1)  # 2026-11-02 起（D-085）；第一段保留集 2025-07-01 已用过
 
 
 class NotifyConfig(_Model):
