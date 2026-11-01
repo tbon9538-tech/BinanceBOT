@@ -11,7 +11,9 @@ import pandas as pd
 from bot.domain.types import Regime
 
 
-def regime_series(close: pd.Series, sma_period: int, buffer: float) -> pd.DataFrame:
+def regime_series(
+    close: pd.Series, sma_period: int, buffer: float, *, mode: str = "sma", tsmom_lookback: int = 90
+) -> pd.DataFrame:
     """返回以日期为索引的 DataFrame：state（Regime 值）、switched_on、switched_off、sma。
 
     - RISK_OFF 且 c_t > SMA × (1 + buffer) → RISK_ON；
@@ -19,6 +21,9 @@ def regime_series(close: pd.Series, sma_period: int, buffer: float) -> pd.DataFr
     - 其他情况（包括 SMA 不可用、当天收盘缺失）保持原状态。
     """
     sma = close.rolling(sma_period, min_periods=sma_period).mean()
+    if mode == "tsmom":
+        # 研究对照 E2b：把"价格相对 SMA"换成"价格相对 tsmom_lookback 天前的收盘价"，其余规则相同
+        sma = close.shift(tsmom_lookback)
     c = close.to_numpy(dtype="float64")
     m = sma.to_numpy(dtype="float64")
     states: list[str] = []

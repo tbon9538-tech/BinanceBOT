@@ -176,6 +176,11 @@ def run_experiment(
         }
         append_trial(trials_file, row)
         row["sat_trades_per_month"] = float(sat["trades_per_month"].iloc[0]) if len(sat) else float("nan")
+        n_boot = int(spec.get("bootstrap", 0))
+        if n_boot:
+            mdds = stats.block_bootstrap_mdd(stats.daily_returns(res.nav), block_days=30, n=n_boot)
+            row["boot_mdd_p80"] = float(np.percentile(mdds, 20))
+        row["worst_7d"] = float((res.nav / res.nav.shift(7) - 1).min())
         row["yearly"] = summ["yearly"]
         rows.append(row)
         navs[v.name] = res.nav
@@ -205,10 +210,10 @@ def _write_experiment_summary(
         f"- 假设：{spec.get('hypothesis', '')}",
         f"- 通过标准：{spec.get('criteria', 'strategy_research.md §0.3')}",
         "",
-        "| 变体 | 年化 | 夏普 | 最大回撤 | Calmar | 前半段夏普 | 后半段夏普 | 平均仓位 | 年换手 | 卫星月均交易 | "
+        "| 变体 | 年化 | 夏普 | 最大回撤 | Calmar | 前半段夏普 | 后半段夏普 | 平均仓位 | 年换手 | 卫星月均交易 | 最差7日 | bootstrap回撤P80 | "
         + " | ".join(years)
         + " |",
-        "|---" * (10 + len(years)) + "|",
+        "|---" * (12 + len(years)) + "|",
     ]
     for r in table.itertuples():
         y = r.yearly
@@ -216,6 +221,7 @@ def _write_experiment_summary(
             f"| {r.variant} | {r.cagr:.1%} | {r.sharpe:.2f} | {r.mdd:.1%} | {r.calmar:.2f} | "
             f"{getattr(r, 'h1_sharpe', float('nan')):.2f} | {getattr(r, 'h2_sharpe', float('nan')):.2f} | "
             f"{r.avg_gross:.2f} | {r.turnover_per_year:.1f} | {r.sat_trades_per_month:.1f} | "
+            f"{r.worst_7d:.1%} | {getattr(r, 'boot_mdd_p80', float('nan')):.1%} | "
             + " | ".join(f"{y.get(k, float('nan')):.1%}" for k in years)
             + " |"
         )

@@ -98,6 +98,8 @@ class RegimeConfig(_Model):
     buffer: float = Field(0.02, ge=0, lt=0.5)
     replay_days: int = Field(730, ge=0)
     risk_on_mode: Literal["ramp", "immediate"] = "ramp"
+    mode: Literal["sma", "tsmom"] = "sma"  # tsmom 仅用于研究对照 E2b：BTC 回看期收益 ± buffer
+    tsmom_lookback: int = Field(90, ge=5)
 
     @field_validator("symbol")
     @classmethod

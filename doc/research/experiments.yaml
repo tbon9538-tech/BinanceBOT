@@ -1,0 +1,220 @@
+# 预注册实验（dev_plan §3，strategy_research.md）。基线 = config/config.yaml 当前值。
+# 每个实验通过后，把通过的取值写回 config/config.yaml，作为下一个实验的基线（结论见 doc/research/log.md）。
+# 覆盖项用点号路径；engine 为研究引擎选项覆盖（EngineOptions）。
+
+E0:
+  title: 引擎交叉校验与基线
+  hypothesis: 正式引擎在 v2 规则下的结果与探索脚本（strategy_review §5.3：年化 32%、夏普 1.14、回撤 −44%）相近，差异可以逐项解释
+  criteria: 差异可解释（取整、上市天数口径、排除名单、最小下单额）
+  variants:
+    - name: v3_default
+    - name: v2_replica
+      overrides:
+        sleeves.core.enabled: false
+        sleeves.satellite.capital_weight: 1.0
+        sleeves.satellite.exclude_symbols: []
+        sleeves.satellite.momentum_skip: 5
+        sleeves.satellite.target_annual_vol: 0.40
+        universe.universe_size: 40
+        universe.min_median_quote_volume: 20000000
+        risk.trailing_stop.enabled: true
+        regime.risk_on_mode: immediate
+        rebalance.threshold_mode: absolute
+        rebalance.min_trade_usdt: 0
+      engine: {initial_capital: 1000000, delist_haircut: 0.0}
+
+E1:
+  title: 标的池（排名规模 × 绝对下限；上市天数）
+  hypothesis: 按排名取标的池在 20～40、下限 0～1000 万之间结果平稳；上市天数 60～180 影响小
+  bootstrap: 300
+  grid:
+    universe.universe_size: [20, 30, 40]
+    universe.min_median_quote_volume: [0, 5000000, 10000000]
+  variants:
+    - name: listing60
+      overrides: {universe.min_listing_days: 60}
+    - name: listing180
+      overrides: {universe.min_listing_days: 180}
+
+E2a:
+  title: 大盘过滤 SMA × 缓冲带（只看热力图，不选最优点）
+  hypothesis: 默认值（100 / 0.02）所在 3×3 邻域的 Calmar 均值 ≥ 全网格最优的 80%
+  grid:
+    regime.sma_period: [50, 75, 100, 150, 200]
+    regime.buffer: [0.0, 0.01, 0.02, 0.03, 0.05]
+
+E2b:
+  title: 替代大盘信号：BTC 时间序列动量（价格相对 N 天前）
+  hypothesis: TSMOM 与 SMA 过滤效果相近；只有在满足 §0.3 全部条件时才替换默认值
+  variants:
+    - name: tsmom60
+      overrides: {regime.mode: tsmom, regime.tsmom_lookback: 60}
+    - name: tsmom90
+      overrides: {regime.mode: tsmom, regime.tsmom_lookback: 90}
+    - name: tsmom120
+      overrides: {regime.mode: tsmom, regime.tsmom_lookback: 120}
+
+E2c:
+  title: Risk-On 时立即全量建仓 vs 逐步建仓
+  hypothesis: 差异在噪声内；若如此选 ramp
+  variants:
+    - name: ramp
+      overrides: {regime.risk_on_mode: ramp}
+    - name: immediate
+      overrides: {regime.risk_on_mode: immediate}
+
+E3a:
+  title: 动量回看期（skip=0）
+  hypothesis: 1～4 周最强（文献）；只在 {21, 28} 中选择，除非 14 在两段和邻域都明显占优
+  grid:
+    sleeves.satellite.momentum_lookback: [14, 21, 28, 42]
+
+E3b:
+  title: 跳过最近天数（lookback=28）
+  hypothesis: 大币呈现短期动量而非反转，skip=0 不劣于 skip>0
+  grid:
+    sleeves.satellite.momentum_skip: [0, 1, 3, 5]
+
+E3c:
+  title: 动量得分定义
+  hypothesis: ret/vol 不劣于纯收益；多周期得分可能更稳，但只有两段都不变差时才替换
+  grid:
+    sleeves.satellite.score: [ret_over_vol, ret, blend]
+
+E5:
+  title: 回看期涨幅上限
+  hypothesis: 剔除拉盘币有经济学理由；阈值在 1.0～3.0 之间结果平稳
+  variants:
+    - name: cap_off
+      overrides: {sleeves.satellite.max_lookback_return: null}
+    - name: cap_1.0
+      overrides: {sleeves.satellite.max_lookback_return: 1.0}
+    - name: cap_1.5
+      overrides: {sleeves.satellite.max_lookback_return: 1.5}
+    - name: cap_2.0
+      overrides: {sleeves.satellite.max_lookback_return: 2.0}
+    - name: cap_3.0
+      overrides: {sleeves.satellite.max_lookback_return: 3.0}
+
+E6:
+  title: ATR 追踪止损
+  hypothesis: 在已有大盘过滤、单币均线、平滑调仓与波动率目标的情况下，止损没有正贡献；只有满足 §0.3 且明显降低单周最大损失时才开启
+  variants:
+    - name: stop_off
+      overrides: {risk.trailing_stop.enabled: false}
+    - name: atr2.0
+      overrides: {risk.trailing_stop.enabled: true, risk.trailing_stop.atr_multiplier: 2.0}
+    - name: atr2.5
+      overrides: {risk.trailing_stop.enabled: true, risk.trailing_stop.atr_multiplier: 2.5}
+    - name: atr3.0
+      overrides: {risk.trailing_stop.enabled: true, risk.trailing_stop.atr_multiplier: 3.0}
+    - name: atr4.0
+      overrides: {risk.trailing_stop.enabled: true, risk.trailing_stop.atr_multiplier: 4.0}
+    - name: atr2.5_cd3
+      overrides: {risk.trailing_stop.enabled: true, risk.trailing_stop.cooldown_days: 3}
+    - name: atr2.5_cd14
+      overrides: {risk.trailing_stop.enabled: true, risk.trailing_stop.cooldown_days: 14}
+
+E4a:
+  title: 每个袖子的目标波动（由风险约束决定）
+  hypothesis: 取"bootstrap 下最大回撤的 80 分位 ≤ 35%"的最大值，不按收益选择
+  bootstrap: 1000
+  variants:
+    - name: tv0.20
+      overrides: {sleeves.core.target_annual_vol: 0.20, sleeves.satellite.target_annual_vol: 0.20}
+    - name: tv0.25
+      overrides: {sleeves.core.target_annual_vol: 0.25, sleeves.satellite.target_annual_vol: 0.25}
+    - name: tv0.30
+      overrides: {sleeves.core.target_annual_vol: 0.30, sleeves.satellite.target_annual_vol: 0.30}
+    - name: tv0.35
+      overrides: {sleeves.core.target_annual_vol: 0.35, sleeves.satellite.target_annual_vol: 0.35}
+    - name: tv0.40
+      overrides: {sleeves.core.target_annual_vol: 0.40, sleeves.satellite.target_annual_vol: 0.40}
+
+E4b:
+  title: 波动率估计窗口
+  hypothesis: 20～60 天之间结果平稳
+  grid:
+    sleeves.core.vol_lookback: [20, 30, 60]
+
+E4c:
+  title: 卫星选币数量与加权
+  hypothesis: 3～8 个、等权与波动倒数之间差异在噪声内；若如此保留 5 个等权
+  grid:
+    sleeves.satellite.top_n: [3, 5, 8]
+    sleeves.satellite.weighting: [equal, inverse_vol]
+
+E7:
+  title: 核心–卫星资金权重
+  hypothesis: 核心 0.5 时前后半段最小夏普高于两个极端中的较小者，且 0.3～0.7 为高原；差异在噪声内用 0.5
+  bootstrap: 500
+  variants:
+    - name: core0.0
+      overrides: {sleeves.core.enabled: false, sleeves.satellite.capital_weight: 1.0}
+    - name: core0.3
+      overrides: {sleeves.core.capital_weight: 0.3, sleeves.satellite.capital_weight: 0.7}
+    - name: core0.5
+      overrides: {sleeves.core.capital_weight: 0.5, sleeves.satellite.capital_weight: 0.5}
+    - name: core0.7
+      overrides: {sleeves.core.capital_weight: 0.7, sleeves.satellite.capital_weight: 0.3}
+    - name: core1.0
+      overrides: {sleeves.core.capital_weight: 1.0, sleeves.satellite.enabled: false}
+
+E8:
+  title: 调仓时点与容忍带模式
+  hypothesis: 平滑能显著降低时点运气；容忍带模式在成本相当时选跟踪误差更小的，差异在噪声内选 relative 0.25
+  variants:
+    - name: smooth1
+      overrides: {sleeves.core.smoothing_days: 1, sleeves.satellite.smoothing_days: 1}
+    - name: smooth3
+      overrides: {sleeves.core.smoothing_days: 3, sleeves.satellite.smoothing_days: 3}
+    - name: smooth7
+      overrides: {sleeves.core.smoothing_days: 7, sleeves.satellite.smoothing_days: 7}
+    - {name: weekly_mon, overrides: {sleeves.core.rebalance_mode: weekly, sleeves.satellite.rebalance_mode: weekly, sleeves.core.rebalance_weekday: 0, sleeves.satellite.rebalance_weekday: 0}}
+    - {name: weekly_tue, overrides: {sleeves.core.rebalance_mode: weekly, sleeves.satellite.rebalance_mode: weekly, sleeves.core.rebalance_weekday: 1, sleeves.satellite.rebalance_weekday: 1}}
+    - {name: weekly_wed, overrides: {sleeves.core.rebalance_mode: weekly, sleeves.satellite.rebalance_mode: weekly, sleeves.core.rebalance_weekday: 2, sleeves.satellite.rebalance_weekday: 2}}
+    - {name: weekly_thu, overrides: {sleeves.core.rebalance_mode: weekly, sleeves.satellite.rebalance_mode: weekly, sleeves.core.rebalance_weekday: 3, sleeves.satellite.rebalance_weekday: 3}}
+    - {name: weekly_fri, overrides: {sleeves.core.rebalance_mode: weekly, sleeves.satellite.rebalance_mode: weekly, sleeves.core.rebalance_weekday: 4, sleeves.satellite.rebalance_weekday: 4}}
+    - {name: weekly_sat, overrides: {sleeves.core.rebalance_mode: weekly, sleeves.satellite.rebalance_mode: weekly, sleeves.core.rebalance_weekday: 5, sleeves.satellite.rebalance_weekday: 5}}
+    - {name: weekly_sun, overrides: {sleeves.core.rebalance_mode: weekly, sleeves.satellite.rebalance_mode: weekly, sleeves.core.rebalance_weekday: 6, sleeves.satellite.rebalance_weekday: 6}}
+    - name: band_abs0.02
+      overrides: {rebalance.threshold_mode: absolute, rebalance.threshold: 0.02}
+    - name: band_rel0.15
+      overrides: {rebalance.threshold_mode: relative, rebalance.threshold_rel: 0.15}
+    - name: band_rel0.25
+      overrides: {rebalance.threshold_mode: relative, rebalance.threshold_rel: 0.25}
+    - name: band_rel0.40
+      overrides: {rebalance.threshold_mode: relative, rebalance.threshold_rel: 0.40}
+    - name: band_none_ideal
+      engine: {ideal: true}
+
+E9:
+  title: 成本压力与真实资金量
+  hypothesis: 成本 ×2 时仍满足硬约束；500 USDT 下与理想情况的年化收益差 < 2 个百分点
+  variants:
+    - name: cost_x1
+    - name: cost_x2
+      engine: {fee: 0.002, slippage: 0.001}
+    - name: cost_x3
+      engine: {fee: 0.003, slippage: 0.0015}
+    - name: cap500_real
+      engine: {initial_capital: 500}
+    - name: cap500_ideal
+      engine: {initial_capital: 500, ideal: true}
+    - name: cap2000_real
+      engine: {initial_capital: 2000}
+    - name: cap2000_ideal
+      engine: {initial_capital: 2000, ideal: true}
+
+WF:
+  title: walk-forward 候选（只在目标波动与核心权重上选择）
+  variants:
+    - {name: tv0.25_core0.3, overrides: {sleeves.core.target_annual_vol: 0.25, sleeves.satellite.target_annual_vol: 0.25, sleeves.core.capital_weight: 0.3, sleeves.satellite.capital_weight: 0.7}}
+    - {name: tv0.25_core0.5, overrides: {sleeves.core.target_annual_vol: 0.25, sleeves.satellite.target_annual_vol: 0.25, sleeves.core.capital_weight: 0.5, sleeves.satellite.capital_weight: 0.5}}
+    - {name: tv0.25_core0.7, overrides: {sleeves.core.target_annual_vol: 0.25, sleeves.satellite.target_annual_vol: 0.25, sleeves.core.capital_weight: 0.7, sleeves.satellite.capital_weight: 0.3}}
+    - {name: tv0.30_core0.3, overrides: {sleeves.core.target_annual_vol: 0.3, sleeves.satellite.target_annual_vol: 0.3, sleeves.core.capital_weight: 0.3, sleeves.satellite.capital_weight: 0.7}}
+    - {name: tv0.30_core0.5, overrides: {sleeves.core.target_annual_vol: 0.3, sleeves.satellite.target_annual_vol: 0.3, sleeves.core.capital_weight: 0.5, sleeves.satellite.capital_weight: 0.5}}
+    - {name: tv0.30_core0.7, overrides: {sleeves.core.target_annual_vol: 0.3, sleeves.satellite.target_annual_vol: 0.3, sleeves.core.capital_weight: 0.7, sleeves.satellite.capital_weight: 0.3}}
+    - {name: tv0.35_core0.3, overrides: {sleeves.core.target_annual_vol: 0.35, sleeves.satellite.target_annual_vol: 0.35, sleeves.core.capital_weight: 0.3, sleeves.satellite.capital_weight: 0.7}}
+    - {name: tv0.35_core0.5, overrides: {sleeves.core.target_annual_vol: 0.35, sleeves.satellite.target_annual_vol: 0.35, sleeves.core.capital_weight: 0.5, sleeves.satellite.capital_weight: 0.5}}
+    - {name: tv0.35_core0.7, overrides: {sleeves.core.target_annual_vol: 0.35, sleeves.satellite.target_annual_vol: 0.35, sleeves.core.capital_weight: 0.7, sleeves.satellite.capital_weight: 0.3}}

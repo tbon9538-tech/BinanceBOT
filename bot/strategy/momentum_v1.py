@@ -47,7 +47,9 @@ class MomentumV1:
         rc = cfg.regime
         if rc.symbol not in panel.columns:
             raise ValueError(f"面板中没有大盘过滤标的 {rc.symbol}")
-        self.regime = regime_series(panel.close[rc.symbol], rc.sma_period, rc.buffer)
+        self.regime = regime_series(
+            panel.close[rc.symbol], rc.sma_period, rc.buffer, mode=rc.mode, tsmom_lookback=rc.tsmom_lookback
+        )
         self._switch_on_dates = pd.DatetimeIndex(self.regime.index[self.regime["switched_on"].to_numpy()])
         self._sleeves = cfg.enabled_sleeves()
         self._raw_cache: dict[tuple[str, pd.Timestamp, frozenset[str]], dict[str, float]] = {}

@@ -73,6 +73,7 @@ class MarketPanel:
         if end is not None:
             hi = min(hi, pd.Timestamp(end))
         idx = pd.date_range(lo, hi, freq="D", name="date")
+
         def field_panel(f: str) -> pd.DataFrame:
             return pd.DataFrame({c: d[f] for c, d in cols.items()}).reindex(idx).astype("float64")
 
