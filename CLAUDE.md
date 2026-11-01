@@ -12,19 +12,11 @@
 | `doc/open_questions.md` | 待决问题及决策记录 |
 | `doc/strategy_research.md` | 研究方案与实验 E0～E11 |
 
-## 当前进度
+## 当前进度（2026-11-01）
 
-- M0（项目骨架）已完成，C0 已确认。
-- M1（数据层）已完成：行情客户端、vision 下载、market.db、交易段、保留集守卫、资产审核。
-- 下一步：M2（策略纯函数与研究引擎）。资产审核草稿 `doc/assets_review/assets.draft.yaml` 等待用户审核后，由用户（或经用户明确同意）写入 `config/assets.yaml`。
-
-数据命令：
-
-```bash
-uv run python -m bot data sync            # 增量同步全部 USDT 交易对日线（含已下架），写入 data/market.db
-uv run python -m bot data report          # 各年份覆盖情况
-uv run python -m bot assets review        # 生成资产审核清单与草稿（doc/assets_review/）
-```
+- M0～M7 的代码与文档全部完成，进度表见 `doc/dev_plan.md` 开头。
+- 研究：参数提案 `doc/research/proposal_v1.md`；保留集已运行一次（**不得再运行**），夏普 0.17，触发"不进入实盘"规则。
+- testnet 联调通过（`doc/testnet_log.md`）；demo 前向运行与是否上线由用户决定（`doc/open_questions.md` Q14）。
 
 ## 常用命令（在项目根目录执行）
 
