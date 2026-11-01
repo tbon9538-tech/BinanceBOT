@@ -144,7 +144,10 @@ class MarketStore:
         stmt = sqlite_insert(symbols_meta)
         stmt = stmt.on_conflict_do_update(
             index_elements=["symbol"],
-            set_={c: stmt.excluded[c] for c in ["base_asset", "quote_asset", "status", "is_spot_trading_allowed", "updated_at"]},
+            set_={
+                c: stmt.excluded[c]
+                for c in ["base_asset", "quote_asset", "status", "is_spot_trading_allowed", "updated_at"]
+            },
         )
         with self.engine.begin() as conn:
             conn.execute(stmt, rows)
@@ -159,14 +162,18 @@ class MarketStore:
 
     def symbols(self) -> list[str]:
         with self.engine.connect() as conn:
-            return [r[0] for r in conn.execute(select(klines_1d.c.symbol).distinct().order_by(klines_1d.c.symbol))]
+            return [
+                r[0] for r in conn.execute(select(klines_1d.c.symbol).distinct().order_by(klines_1d.c.symbol))
+            ]
 
     def symbol_meta(self) -> pd.DataFrame:
         with self.engine.connect() as conn:
             rows = conn.execute(select(symbols_meta)).mappings().all()
         return pd.DataFrame([dict(r) for r in rows])
 
-    def read_raw(self, symbol: str, start: str | None = None, end_exclusive: str | None = None) -> pd.DataFrame:
+    def read_raw(
+        self, symbol: str, start: str | None = None, end_exclusive: str | None = None
+    ) -> pd.DataFrame:
         """raw frame（十进制字符串），按日期升序。日期为 YYYY-MM-DD 字符串，end 不含。"""
         q = select(*[klines_1d.c[c] for c in KLINE_COLUMNS]).where(klines_1d.c.symbol == symbol)
         if start is not None:
@@ -180,7 +187,9 @@ class MarketStore:
             return empty_frame()
         return pd.DataFrame([tuple(r) for r in rows], columns=KLINE_COLUMNS)
 
-    def read_symbol(self, symbol: str, start: str | None = None, end_exclusive: str | None = None) -> pd.DataFrame:
+    def read_symbol(
+        self, symbol: str, start: str | None = None, end_exclusive: str | None = None
+    ) -> pd.DataFrame:
         """float 数据，DatetimeIndex。"""
         return to_float_frame(self.read_raw(symbol, start, end_exclusive))
 
@@ -188,7 +197,11 @@ class MarketStore:
         """每年的交易对数与"交易对·天"数（只统计数量，不含价格）。"""
         year = func.substr(klines_1d.c.date, 1, 4)
         q = (
-            select(year.label("year"), func.count(klines_1d.c.symbol.distinct()).label("symbols"), func.count().label("rows"))
+            select(
+                year.label("year"),
+                func.count(klines_1d.c.symbol.distinct()).label("symbols"),
+                func.count().label("rows"),
+            )
             .group_by(year)
             .order_by(year)
         )

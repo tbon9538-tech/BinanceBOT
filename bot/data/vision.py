@@ -11,8 +11,8 @@ import hashlib
 import io
 import logging
 import time
-import zipfile
 import xml.etree.ElementTree as ET
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path

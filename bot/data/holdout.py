@@ -76,7 +76,7 @@ class HoldoutLog:
         if not first and not not_first_run:
             raise HoldoutViolation(
                 "保留集已经运行过。再次运行必须加 --i-know-this-is-not-the-first-run，"
-                "并且报告中会醒目标注\"非首次运行\"（spec §3.6）"
+                '并且报告中会醒目标注"非首次运行"（spec §3.6）'
             )
         return first
 

@@ -129,7 +129,12 @@ def sync_vision(
     def task(meta: dict[str, Any]) -> tuple[str, list[tuple[VisionFile, pd.DataFrame, str]]]:
         sym = meta["symbol"]
         files = plan_symbol_files(
-            vision, sym, since=since, last_closed=last_closed, is_trading=meta["status"] == "TRADING", ingested=ingested
+            vision,
+            sym,
+            since=since,
+            last_closed=last_closed,
+            is_trading=meta["status"] == "TRADING",
+            ingested=ingested,
         )
         return sym, _download_symbol(vision, sym, files)
 
