@@ -32,8 +32,7 @@ def test_spec_subcommands_are_all_registered() -> None:
         ["run", "--once"],
         ["status"],
         ["kill"],
-        ["experiment", "--id", "E1"],
-        ["backtest", "--end", "2025-06-30"],
+        ["pause"],
     ],
 )
 def test_placeholder_commands_validate_config_then_exit(argv, capsys) -> None:  # type: ignore[no-untyped-def]
